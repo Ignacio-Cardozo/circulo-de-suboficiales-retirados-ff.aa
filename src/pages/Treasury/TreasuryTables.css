@@ -108,6 +108,36 @@
   border-radius: 8px;
 }
 
+/* Number range – two numeric inputs with zero-fill */
+.num-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.num-range-inputs .num-input {
+  width: 86px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.num-range-inputs .num-input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.num-range-inputs .num-input:focus {
+  border-color: var(--azul-institucional);
+}
+
 /* Legacy input-with-icon helper */
 .input-with-icon {
   position: relative;
@@ -336,6 +366,8 @@
   flex: 1;
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
+  align-content: flex-start;
   gap: 12px;
   min-width: 0;
 }
