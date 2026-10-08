@@ -2,25 +2,9 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
+import { EMAIL_RE, checkPasswordStrength, validatePassword } from "./passwordRules";
 import logo from "../../assets/logo_ffaa-bg.png";
 import "../Login/Login.css";
-
-const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-
-function checkPasswordStrength(pw: string): { score: number; label: string; color: string } {
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (pw.length >= 12) score++;
-  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
-  if (/\d/.test(pw)) score++;
-  if (/[^a-zA-Z0-9]/.test(pw)) score++;
-
-  if (score <= 1) return { score, label: "Débil", color: "#dc2626" };
-  if (score <= 2) return { score, label: "Media", color: "#ea580c" };
-  if (score <= 3) return { score, label: "Buena", color: "#ca8a04" };
-  if (score <= 4) return { score, label: "Fuerte", color: "#16a34a" };
-  return { score, label: "Muy fuerte", color: "#15803d" };
-}
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
@@ -50,20 +34,9 @@ const Register: React.FC = () => {
       return;
     }
 
-    if (password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres");
-      return;
-    }
-    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password)) {
-      setError("La contraseña debe incluir mayúsculas y minúsculas");
-      return;
-    }
-    if (!/\d/.test(password)) {
-      setError("La contraseña debe incluir al menos un número");
-      return;
-    }
-    if (!/[^a-zA-Z0-9]/.test(password)) {
-      setError("La contraseña debe incluir al menos un carácter especial (!@#$%...)");
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 

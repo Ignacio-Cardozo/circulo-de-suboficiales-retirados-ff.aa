@@ -90,6 +90,12 @@ const Login: React.FC = () => {
         </button>
 
         <p className="login-link-text">
+          <Link to="/recuperar-contrasena" className="login-link">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
+
+        <p className="login-link-text">
           ¿No tenés una cuenta?{" "}
           <Link to="/register" className="login-link">Creá una</Link>
         </p>

@@ -206,6 +206,54 @@
   animation: login-spin 1s linear infinite;
 }
 
+.login-btn-link {
+  text-decoration: none;
+}
+
+/* ─── Estado informational (email enviado / link inválido) ── */
+.login-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.login-state-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-state-icon-danger {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.login-state-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111;
+  margin: 4px 0 0;
+}
+
+.login-state-text {
+  font-size: 14px;
+  color: #555;
+  margin: 0;
+}
+
+.login-state-text strong {
+  color: #11223A;
+  font-weight: 600;
+  word-break: break-all;
+}
+
 /* ─── Link bottom ─────────────────────────────── */
 .login-link-text {
   text-align: center;

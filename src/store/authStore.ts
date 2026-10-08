@@ -21,6 +21,8 @@ type AuthState = {
     password: string,
   ) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<{ error?: string }>;
+  resetPassword: (newPassword: string, token: string) => Promise<{ error?: string }>;
   checkSession: () => Promise<void>;
 };
 
@@ -157,6 +159,53 @@ export const useAuthStore = create<AuthState>((set) => ({
       await authClient.signOut();
     } finally {
       set({ user: null });
+    }
+  },
+
+  requestPasswordReset: async (email) => {
+    set({ loading: true });
+    try {
+      const result = await authClient.requestPasswordReset({
+        email,
+        redirectTo: `${window.location.origin}/restablecer-contrasena`,
+      });
+      set({ loading: false });
+      if (result.error) {
+        return {
+          error: result.error.message ?? "No se pudo enviar el email de recuperación",
+        };
+      }
+      return {};
+    } catch (err) {
+      set({ loading: false });
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Error al solicitar el restablecimiento de contraseña",
+      };
+    }
+  },
+
+  resetPassword: async (newPassword, token) => {
+    set({ loading: true });
+    try {
+      const result = await authClient.resetPassword({ newPassword, token });
+      set({ loading: false });
+      if (result.error) {
+        return {
+          error: result.error.message ?? "No se pudo restablecer la contraseña",
+        };
+      }
+      return {};
+    } catch (err) {
+      set({ loading: false });
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Error al restablecer la contraseña",
+      };
     }
   },
 }));

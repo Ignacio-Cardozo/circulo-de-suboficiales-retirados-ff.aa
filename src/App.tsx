@@ -5,6 +5,8 @@ import Layout from "./components/Layout/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
+import ForgotPassword from "./pages/Login/ForgotPassword";
+import ResetPassword from "./pages/Login/ResetPassword";
 import Welcome from "./pages/Welcome/Welcome";
 import DashboardPage from "./pages/Dashboard/Dashboard";
 import Movements from "./pages/Treasury/Movements/Movements";
@@ -38,6 +40,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/recuperar-contrasena" element={<ForgotPassword />} />
+        <Route path="/restablecer-contrasena" element={<ResetPassword />} />
         <Route
           path="/"
           element={
