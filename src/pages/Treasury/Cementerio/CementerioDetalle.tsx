@@ -457,14 +457,23 @@ const CementerioDetalle: React.FC = () => {
                             </div>
                             {groupRecords.map((rec) => (
                                 <div key={rec.id} style={{ padding: 16, borderBottom: groupRecords.length <= 1 ? "1px solid var(--border)" : "16px solid var(--border)" }}>
-                                    {/* Ocupante como subtítulo */}
+                                    {/* Ocupante (editable) */}
                                     <div style={{
                                         display: "flex", alignItems: "center", gap: 8,
                                         padding: "6px 12px", background: "#f1f5f9",
                                         borderRadius: 6, marginBottom: 16,
                                         fontWeight: 600, fontSize: 14, color: "var(--text)",
                                     }}>
-                                        Ocupante: {rec.ocupante || "—"}
+                                        <label htmlFor={`ocupante-${rec.id}`} style={{ fontWeight: 600 }}>Ocupante:</label>
+                                        <input
+                                            autoComplete="off"
+                                            id={`ocupante-${rec.id}`}
+                                            type="text"
+                                            className="field-input"
+                                            value={rec.ocupante}
+                                            onChange={(e) => handleFieldChange(rec.id, "ocupante", e.target.value)}
+                                            style={{ flex: 1, background: "#fff" }}
+                                        />
                                     </div>
 
                                     {/* Fila 1: Datos del nicho */}
