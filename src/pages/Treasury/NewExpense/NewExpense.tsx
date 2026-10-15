@@ -272,7 +272,7 @@ const NewExpense: React.FC = () => {
           copies_to_print: receiptCopiesDefaults[concepto] ?? 1,
           detail: detail,
           concept: concepto,
-          payer_name: isServiciosVarios && selectedProvider ? selectedProvider.nombre : isHaberesConcept && selectedMember ? selectedMember.nombre : null,
+          payer_name: concepto === "Pago de servicio externo" && svcName ? svcName : isServiciosVarios && selectedProvider ? selectedProvider.nombre : isHaberesConcept && selectedMember ? selectedMember.nombre : null,
         });
 
         setComprobanteData({
@@ -282,7 +282,7 @@ const NewExpense: React.FC = () => {
           detail,
           amount: importeNum,
           origin: originLabel,
-          payerName: isServiciosVarios && selectedProvider ? selectedProvider.nombre : isHaberesConcept && selectedMember ? selectedMember.nombre : undefined,
+          payerName: concepto === "Pago de servicio externo" && svcName ? svcName : isServiciosVarios && selectedProvider ? selectedProvider.nombre : isHaberesConcept && selectedMember ? selectedMember.nombre : undefined,
           conceptDetail: isServiciosVarios && selectedProvider
             ? (descripcion ? `Pago por servicio brindado: ${descripcion}` : "Pago por servicio brindado")
             : undefined,

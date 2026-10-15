@@ -64,6 +64,10 @@ function buildSingleReceiptHtml(data: ComprobanteData, copyLabel: string): strin
           <div class="field-value underline">${data.payerName || "—"}</div>
         </div>
         <div class="field">
+          <span class="field-label">Importe:</span>
+          <div class="field-value amount-numbers">${toCurrency(data.amount)}</div>
+        </div>
+        <div class="field">
           <span class="field-label">La cantidad de pesos:</span>
           <div class="field-value amount-words">${numberToWords(data.amount).toUpperCase()}</div>
         </div>
@@ -76,7 +80,6 @@ function buildSingleReceiptHtml(data: ComprobanteData, copyLabel: string): strin
       </div>
 
       <div class="receipt-footer">
-        <div class="footer-amount">$ ${new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(data.amount)}</div>
         <div class="footer-signature">
           <div class="sig-line">Firma</div>
           <div class="acl-line">Aclaración: <span></span></div>
@@ -356,12 +359,12 @@ function buildPrintHtml(data: ComprobanteData, overrideLabel?: string): string {
         .receipt-body .field-value { margin-top: 2px; }
         .receipt-body .underline { border-bottom: 1px solid #999; display: inline-block; min-width: ${s.underlineMin}; }
         .receipt-body .amount-words { font-style: italic; margin-top: 4px; }
+        .receipt-body .amount-numbers { font-weight: 700; font-size: ${s.amount}; color: #1a3a5c; }
 
         .receipt-concept { margin: ${s.conceptMt}; font-size: ${s.concept}; line-height: ${s.conceptLh}; }
         .receipt-concept .concept-label { font-weight: 600; }
 
-        .receipt-footer { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; }
-        .footer-amount { font-size: ${s.amount}; font-weight: 700; color: #1a3a5c; }
+        .receipt-footer { margin-top: auto; display: flex; justify-content: flex-end; align-items: flex-end; }
         .footer-signature { text-align: center; min-width: ${s.sigMinW}; }
         .footer-signature .sig-line { border-top: 1px solid #333; margin-top: ${s.sigMt}; padding-top: 3px; font-size: ${s.sig}; color: #555; }
         .footer-signature .acl-line { margin-top: ${s.aclMt}; font-size: ${s.sig}; color: #555; }
