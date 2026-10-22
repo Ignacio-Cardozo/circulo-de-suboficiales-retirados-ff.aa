@@ -172,6 +172,40 @@
   background: var(--azul-armada);
 }
 
+.btn-baja {
+  background: var(--rojo-alerta);
+}
+
+.btn-baja:hover {
+  background: #b91c1c;
+}
+
+.baja-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.baja-checkbox input[type="checkbox"] {
+  accent-color: var(--rojo-alerta);
+}
+
+.baja-error {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--rojo-alerta);
+}
+
+.family-picker-actions .btn-save:disabled,
+.family-picker-actions .btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .family-picker-overlay {
   position: fixed;
   inset: 0;

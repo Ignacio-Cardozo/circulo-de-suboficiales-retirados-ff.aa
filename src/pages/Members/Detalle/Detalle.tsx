@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Loader, Plus, X, Eye, Pencil } from "lucide-react";
-import { fetchMemberById } from "../../../services/membersApi";
+import { ArrowLeft, User, Loader, Plus, X, Eye, Pencil, UserMinus } from "lucide-react";
+import { fetchMemberById, saveMember } from "../../../services/membersApi";
 import { fetchDuesByMember, saveDue, fetchFamilyMembers } from "../../../services/duesApi";
 import { fetchCementeriosByOwner, fetchCementerioMovimientosByMovement } from "../../../services/cementeriosApi";
 import PeriodPicker from "../../../components/period/PeriodPicker";
@@ -24,6 +24,13 @@ const DetalleSocio: React.FC = () => {
   const [hasNichos, setHasNichos] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
+  const [showBajaModal, setShowBajaModal] = useState(false);
+  const [bajaConFecha, setBajaConFecha] = useState(false);
+  const [bajaFecha, setBajaFecha] = useState("");
+  const [bajaFallecido, setBajaFallecido] = useState(false);
+  const [bajaMotivo, setBajaMotivo] = useState("");
+  const [savingBaja, setSavingBaja] = useState(false);
+  const [bajaError, setBajaError] = useState<string | null>(null);
   const [periods, setPeriods] = useState<string[]>([]);
   const [paidPeriods, setPaidPeriods] = useState<Set<string>>(new Set());
   const [periodYear, setPeriodYear] = useState(new Date().getFullYear());
@@ -137,6 +144,37 @@ const DetalleSocio: React.FC = () => {
     finally { setSavingMark(false); }
   }, [id, periods, familyGroupPrefix, selectedFamily]);
 
+  const openBajaModal = () => {
+    if (!member) return;
+    setBajaConFecha(true);
+    setBajaFecha(member.fechaBaja || todayLocal());
+    setBajaFallecido(member.fallecido);
+    setBajaMotivo(member.motivoBaja);
+    setBajaError(null);
+    setShowBajaModal(true);
+  };
+
+  const handleSaveBaja = async () => {
+    if (!member) return;
+    setSavingBaja(true);
+    setBajaError(null);
+    try {
+      await saveMember({
+        ...member,
+        fechaBaja: bajaConFecha ? bajaFecha : "",
+        fallecido: bajaFallecido,
+        motivoBaja: bajaMotivo,
+      });
+      const updated = await fetchMemberById(member.id);
+      setMember(updated);
+      setShowBajaModal(false);
+    } catch (err) {
+      setBajaError(err instanceof Error ? err.message : "Error al dar de baja al socio");
+    } finally {
+      setSavingBaja(false);
+    }
+  };
+
   if (loading) return <div className="dashboard-loading"><Loader size={24} className="spin" /> Cargando socio...</div>;
   if (error || !member) return <div className="dashboard-loading" style={{ color: "var(--rojo-alerta)" }}>{error || "Socio no encontrado"}</div>;
 
@@ -145,6 +183,7 @@ const DetalleSocio: React.FC = () => {
       <div className="detalle-actions-row">
         <button className="btn-back" onClick={() => navigate("/socios")}><ArrowLeft size={18} /> Volver a Socios</button>
         {canModify && <button className="btn-register-period" onClick={() => navigate(`/socios/editar/${id}`)}><Pencil size={16} /> Editar socio</button>}
+        {canModify && <button className="btn-register-period btn-baja" onClick={openBajaModal}><UserMinus size={16} /> Dar de baja</button>}
       </div>
 
       <div className="detalle-card">
@@ -319,6 +358,85 @@ const DetalleSocio: React.FC = () => {
             <div className="family-picker-actions">
               <button className="btn-cancel" onClick={() => setShowModal(false)}>Cancelar</button>
               <button className="btn-save" onClick={handleConfirm} disabled={savingMark || periods.length === 0}>{savingMark ? "Guardando..." : "Registrar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBajaModal && canModify && (
+        <div
+          className="family-picker-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowBajaModal(false);
+          }}
+        >
+          <div className="family-picker-modal">
+            <div className="family-picker-modal-header">
+              <h4>Dar de baja al socio</h4>
+              <button className="modal-close-btn" onClick={() => setShowBajaModal(false)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="modal-member-info">
+                <User size={20} />
+                <div><strong>{member.nombre}</strong><span className="modal-member-sub">Nº Socio {member.numeroDeSocio}</span></div>
+              </div>
+              <div className="config-form">
+                <div className="config-field">
+                  <label className="baja-checkbox">
+                    <input autoComplete="off"
+                      type="checkbox"
+                      checked={bajaConFecha}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setBajaConFecha(checked);
+                        if (checked && !bajaFecha) setBajaFecha(todayLocal());
+                        if (!checked) setBajaFecha("");
+                      }}
+                    />
+                    Fecha de baja
+                  </label>
+                  {bajaConFecha && (
+                    <input autoComplete="off"
+                      type="date"
+                      className="config-input"
+                      value={bajaFecha}
+                      onChange={(e) => setBajaFecha(e.target.value)}
+                    />
+                  )}
+                </div>
+                <div className="config-field">
+                  <label className="baja-checkbox">
+                    <input autoComplete="off"
+                      type="checkbox"
+                      checked={bajaFallecido}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setBajaFallecido(checked);
+                        if (checked) {
+                          setBajaConFecha(true);
+                          if (!bajaFecha) setBajaFecha(todayLocal());
+                          setBajaMotivo("fallecimiento");
+                        }
+                      }}
+                    />
+                    Fallecido
+                  </label>
+                </div>
+                <div className="config-field">
+                  <label>Motivo de baja</label>
+                  <input autoComplete="off"
+                    type="text"
+                    className="config-input"
+                    value={bajaMotivo}
+                    onChange={(e) => setBajaMotivo(e.target.value)}
+                  />
+                </div>
+              </div>
+              {bajaError && <div className="baja-error">{bajaError}</div>}
+            </div>
+            <div className="family-picker-actions">
+              <button className="btn-cancel" onClick={() => setShowBajaModal(false)} disabled={savingBaja}>Cancelar</button>
+              <button className="btn-save" onClick={handleSaveBaja} disabled={savingBaja}>{savingBaja ? "Guardando..." : "Dar de baja"}</button>
             </div>
           </div>
         </div>

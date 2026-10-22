@@ -2,8 +2,33 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Search, UserPlus } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import TablePagination from "../../components/TablePagination/TablePagination";
+import SortIcon from "../../components/ui/SortIcon";
 import "../Treasury/TreasuryTables.css";
 import { usePersonsListStore } from "../../store/personsListStore";
+import type { Person } from "../../models/members";
+import { compareText, nextSortDir, SORT_HINT, type SortDir } from "../../utils/sort";
+
+type PersonSortField =
+  | "nombre"
+  | "tipoDoc"
+  | "documento"
+  | "domicilio"
+  | "telefono"
+  | "brindaServicios";
+
+function comparePersons(
+  a: Person,
+  b: Person,
+  field: PersonSortField,
+  dir: 1 | -1,
+): number {
+  if (field === "brindaServicios") {
+    const av = a.brindaServicios ? 1 : 0;
+    const bv = b.brindaServicios ? 1 : 0;
+    return (av - bv) * dir;
+  }
+  return compareText(a[field], b[field], dir);
+}
 
 const Persons: React.FC = () => {
   const navigate = useNavigate();
@@ -20,7 +45,8 @@ const Persons: React.FC = () => {
   const setCurrentPage = usePersonsListStore((s) => s.setCurrentPage);
   const setRowsPerPage = usePersonsListStore((s) => s.setRowsPerPage);
 
-  const [sortBy, setSortBy] = useState<"nombre" | "brindaServicios" | "noBrindaServicios">("nombre");
+  const [sortField, setSortField] = useState<PersonSortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
 
   useEffect(() => {
     void loadPersons();
@@ -39,25 +65,35 @@ const Persons: React.FC = () => {
 
   const sorted = useMemo(() => {
     const list = [...filtered];
-    if (sortBy === "brindaServicios") {
-      list.sort((a, b) => {
-        const av = a.brindaServicios ? 1 : 0;
-        const bv = b.brindaServicios ? 1 : 0;
-        if (av !== bv) return bv - av;
-        return a.nombre.localeCompare(b.nombre);
-      });
-    } else if (sortBy === "noBrindaServicios") {
-      list.sort((a, b) => {
-        const av = a.brindaServicios ? 1 : 0;
-        const bv = b.brindaServicios ? 1 : 0;
-        if (av !== bv) return av - bv;
-        return a.nombre.localeCompare(b.nombre);
-      });
-    } else {
-      list.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    if (!sortField || !sortDir) {
+      return list.sort((a, b) => compareText(a.nombre, b.nombre, 1));
     }
-    return list;
-  }, [filtered, sortBy]);
+    const dir = sortDir === "asc" ? 1 : -1;
+    return list.sort((a, b) => comparePersons(a, b, sortField, dir));
+  }, [filtered, sortField, sortDir]);
+
+  const handleSort = (field: PersonSortField) => {
+    if (sortField !== field) {
+      setSortField(field);
+      setSortDir("asc");
+      setCurrentPage(1);
+      return;
+    }
+    const next = nextSortDir(sortDir);
+    setSortField(next === null ? null : field);
+    setSortDir(next);
+    setCurrentPage(1);
+  };
+
+  const dirFor = (field: PersonSortField): SortDir =>
+    sortField === field ? sortDir : null;
+
+  const ariaSortFor = (field: PersonSortField) => {
+    const dir = dirFor(field);
+    if (dir === "asc") return "ascending" as const;
+    if (dir === "desc") return "descending" as const;
+    return "none" as const;
+  };
 
   const totalItems = sorted.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / rowsPerPage));
@@ -89,20 +125,6 @@ const Persons: React.FC = () => {
             onChange={(e) => setSearchText(e.target.value)}
           />
         </div>
-        <div className="filter-item" style={{ marginLeft: "auto", width: 240 }}>
-          <select
-            className="filter-select"
-            value={sortBy}
-            onChange={(e) => {
-              setSortBy(e.target.value as typeof sortBy);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="nombre">Ordenar por nombre</option>
-            <option value="brindaServicios">Brinda servicios (primero)</option>
-            <option value="noBrindaServicios">Brinda servicios (último)</option>
-          </select>
-        </div>
       </div>
 
       <div className="table-card">
@@ -118,12 +140,54 @@ const Persons: React.FC = () => {
             </colgroup>
             <thead>
               <tr>
-                <th>Nombre</th>
-                <th>Tipo Doc.</th>
-                <th>Documento</th>
-                <th>Domicilio</th>
-                <th>Teléfono</th>
-                <th>Servicios</th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("nombre")}
+                  aria-sort={ariaSortFor("nombre")}
+                  title={SORT_HINT}
+                >
+                  Nombre <SortIcon dir={dirFor("nombre")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("tipoDoc")}
+                  aria-sort={ariaSortFor("tipoDoc")}
+                  title={SORT_HINT}
+                >
+                  Tipo Doc. <SortIcon dir={dirFor("tipoDoc")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("documento")}
+                  aria-sort={ariaSortFor("documento")}
+                  title={SORT_HINT}
+                >
+                  Documento <SortIcon dir={dirFor("documento")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("domicilio")}
+                  aria-sort={ariaSortFor("domicilio")}
+                  title={SORT_HINT}
+                >
+                  Domicilio <SortIcon dir={dirFor("domicilio")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("telefono")}
+                  aria-sort={ariaSortFor("telefono")}
+                  title={SORT_HINT}
+                >
+                  Teléfono <SortIcon dir={dirFor("telefono")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("brindaServicios")}
+                  aria-sort={ariaSortFor("brindaServicios")}
+                  title={SORT_HINT}
+                >
+                  Servicios <SortIcon dir={dirFor("brindaServicios")} />
+                </th>
               </tr>
             </thead>
             <tbody>

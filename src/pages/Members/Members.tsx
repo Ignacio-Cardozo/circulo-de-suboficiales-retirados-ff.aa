@@ -3,10 +3,12 @@ import { UserPlus, Home, ChevronDown, ChevronUp, RefreshCw, ListChecks, X, Print
 import { useNavigate, useLocation } from "react-router-dom";
 import TablePagination from "../../components/TablePagination/TablePagination";
 import SearchInput from "../../components/ui/SearchInput";
+import SortIcon from "../../components/ui/SortIcon";
 import "../Treasury/TreasuryTables.css";
 import { useMembersListStore } from "../../store/membersListStore";
 import { fetchMembersDebtStatus } from "../../services/membersDebtApi";
 import { todayLocal, parseDateYMD } from "../../utils/format";
+import { compareNullable, compareText, nextSortDir, SORT_HINT, type SortDir } from "../../utils/sort";
 import type { Member } from "../../models/members";
 import logoUrl from "../../assets/logo_ffaa.png";
 
@@ -147,6 +149,55 @@ function printList(members: Member[], name: string, download: boolean): void {
   }, 300);
 }
 
+type MemberSortField =
+  | "numeroDeSocio"
+  | "nombre"
+  | "telefono"
+  | "tipoSocio"
+  | "documento"
+  | "localidad"
+  | "domicilio"
+  | "pagaPor"
+  | "fechaBaja"
+  | "deuda";
+
+type MemberRow = {
+  member: Member;
+  monthsOwed: number;
+  noData: boolean;
+};
+
+function compareMemberRows(
+  a: MemberRow,
+  b: MemberRow,
+  field: MemberSortField,
+  dir: 1 | -1,
+): number {
+  switch (field) {
+    case "numeroDeSocio": {
+      const na = parseInt(a.member.numeroDeSocio.replace(/\D/g, ""), 10) || 0;
+      const nb = parseInt(b.member.numeroDeSocio.replace(/\D/g, ""), 10) || 0;
+      return (na - nb) * dir;
+    }
+    case "fechaBaja": {
+      const da = a.member.fechaBaja
+        ? (parseDateYMD(a.member.fechaBaja)?.getTime() ?? null)
+        : null;
+      const db = b.member.fechaBaja
+        ? (parseDateYMD(b.member.fechaBaja)?.getTime() ?? null)
+        : null;
+      return compareNullable(da, db, dir);
+    }
+    case "deuda": {
+      const da = a.noData ? null : a.monthsOwed;
+      const db = b.noData ? null : b.monthsOwed;
+      return compareNullable(da, db, dir);
+    }
+    default:
+      return compareText(a.member[field], b.member[field], dir);
+  }
+}
+
 const Members: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -180,7 +231,8 @@ const Members: React.FC = () => {
   const [debtLoading, setDebtLoading] = useState(true);
   const [showDebtorsOnly, setShowDebtorsOnly] = useState(false);
   const [hideOldDebt, setHideOldDebt] = useState(false);
-  const [debtSortDir, setDebtSortDir] = useState<"asc" | "desc" | null>(null);
+  const [sortField, setSortField] = useState<MemberSortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
   const [estadoDropdownOpen, setEstadoDropdownOpen] = useState(false);
   const [tipoSocioDropdownOpen, setTipoSocioDropdownOpen] = useState(false);
   const [sexoDropdownOpen, setSexoDropdownOpen] = useState(false);
@@ -195,7 +247,6 @@ const Members: React.FC = () => {
   const [asistencialFilter, setAsistencialFilter] = useState<"todos" | "si" | "no">("todos");
   const [fuerzaFilter, setFuerzaFilter] = useState("");
   const [showMembersFilters, setShowMembersFilters] = useState(false);
-  const [bajaSortDir, setBajaSortDir] = useState<"asc" | "desc" | null>(null);
   const [listaMode, setListaMode] = useState(false);
   const [selectedListaIds, setSelectedListaIds] = useState<Set<string>>(new Set());
   const [listaName, setListaName] = useState("");
@@ -313,6 +364,29 @@ const Members: React.FC = () => {
           o.key === "activos" ? showActivos : o.key === "fallecidos" ? showFallecidos : showBaja
         ).map((o) => o.label).join(", ");
 
+  const handleSort = (field: MemberSortField) => {
+    if (sortField !== field) {
+      setSortField(field);
+      setSortDir("asc");
+      setCurrentPage(1);
+      return;
+    }
+    const next = nextSortDir(sortDir);
+    setSortField(next === null ? null : field);
+    setSortDir(next);
+    setCurrentPage(1);
+  };
+
+  const dirFor = (field: MemberSortField): SortDir =>
+    sortField === field ? sortDir : null;
+
+  const ariaSortFor = (field: MemberSortField) => {
+    const dir = dirFor(field);
+    if (dir === "asc") return "ascending" as const;
+    if (dir === "desc") return "descending" as const;
+    return "none" as const;
+  };
+
   useEffect(() => {
     void loadMembers();
     fetchMembersDebtStatus()
@@ -390,32 +464,27 @@ const Members: React.FC = () => {
         (deathTs !== null && (fDesdeTs === null || deathTs >= fDesdeTs) && (fHastaTs === null || deathTs <= fHastaTs));
 
       return matchSearch && matchEstado && matchPagaPor && matchTipoSocio && matchAsistencial && matchFuerza && matchDebtor && matchOldDebt && matchSexo && matchEdad && matchBajaAnio && matchFallecido;
-    }).sort((a, b) => {
-      if (bajaSortDir) {
-        const da = a.member.fechaBaja ? parseDateYMD(a.member.fechaBaja)?.getTime() ?? null : null;
-        const db = b.member.fechaBaja ? parseDateYMD(b.member.fechaBaja)?.getTime() ?? null : null;
-        if (da === null && db === null) return 0;
-        if (da === null) return 1;
-        if (db === null) return -1;
-        return bajaSortDir === "asc" ? da - db : db - da;
-      }
-      if (debtSortDir === "asc") {
-        return (a.monthsOwed - b.monthsOwed);
-      }
-      if (debtSortDir === "desc") {
-        return (b.monthsOwed - a.monthsOwed);
-      }
-      const na = parseInt(a.member.numeroDeSocio.replace(/\D/g, ""), 10) || 0;
-      const nb = parseInt(b.member.numeroDeSocio.replace(/\D/g, ""), 10) || 0;
-      return na - nb;
     });
-  }, [membersWithDebt, searchText, showActivos, showFallecidos, showBaja, pagaPorFilter, showDebtorsOnly, hideOldDebt, considerationYears, debtSortDir, tipoSocioFilter, asistencialFilter, fuerzaFilter, bajaSortDir, sexoFilter, edadMin, edadMax, bajaDesde, bajaHasta, fallecidoDesde, fallecidoHasta]);
+  }, [membersWithDebt, searchText, showActivos, showFallecidos, showBaja, pagaPorFilter, showDebtorsOnly, hideOldDebt, considerationYears, tipoSocioFilter, asistencialFilter, fuerzaFilter, sexoFilter, edadMin, edadMax, bajaDesde, bajaHasta, fallecidoDesde, fallecidoHasta]);
 
-  const totalItems = filtered.length;
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    if (!sortField || !sortDir) {
+      return list.sort((a, b) => {
+        const na = parseInt(a.member.numeroDeSocio.replace(/\D/g, ""), 10) || 0;
+        const nb = parseInt(b.member.numeroDeSocio.replace(/\D/g, ""), 10) || 0;
+        return na - nb;
+      });
+    }
+    const dir = sortDir === "asc" ? 1 : -1;
+    return list.sort((a, b) => compareMemberRows(a, b, sortField, dir));
+  }, [filtered, sortField, sortDir]);
+
+  const totalItems = sorted.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / rowsPerPage));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * rowsPerPage;
-  const paginated = filtered.slice(startIndex, startIndex + rowsPerPage);
+  const paginated = sorted.slice(startIndex, startIndex + rowsPerPage);
 
   const selectedListaMembers = useMemo(() => {
     const sel = allMembers.filter((m) => selectedListaIds.has(m.id));
@@ -896,37 +965,85 @@ const Members: React.FC = () => {
                     />
                   </th>
                 )}
-                <th>Nº Socio</th>
-                <th>Nombre</th>
-                <th>Teléfono</th>
-                <th>Tipo</th>
-                <th>Documento</th>
-                <th>Localidad</th>
-                <th>Dirección/Residencia</th>
-                <th>Paga por</th>
                 <th
                   className="sortable-th"
-                  style={{ userSelect: "none" }}
-                  onClick={() =>
-                    setBajaSortDir((prev) =>
-                      prev === "asc" ? "desc" : prev === "desc" ? null : "asc"
-                    )
-                  }
-                  title="Ordenar por fecha de baja"
+                  onClick={() => handleSort("numeroDeSocio")}
+                  aria-sort={ariaSortFor("numeroDeSocio")}
+                  title={SORT_HINT}
                 >
-                  Baja {bajaSortDir === "asc" ? "▲" : bajaSortDir === "desc" ? "▼" : <span className="sort-neutral">↕</span>}
+                  Nº Socio <SortIcon dir={dirFor("numeroDeSocio")} />
                 </th>
                 <th
                   className="sortable-th"
-                  style={{ userSelect: "none" }}
-                  onClick={() =>
-                    setDebtSortDir((prev) =>
-                      prev === "asc" ? "desc" : prev === "desc" ? null : "asc"
-                    )
-                  }
-                  title="Ordenar por deuda"
+                  onClick={() => handleSort("nombre")}
+                  aria-sort={ariaSortFor("nombre")}
+                  title={SORT_HINT}
                 >
-                  Deuda {debtSortDir === "asc" ? "▲" : debtSortDir === "desc" ? "▼" : <span className="sort-neutral">↕</span>}
+                  Nombre <SortIcon dir={dirFor("nombre")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("telefono")}
+                  aria-sort={ariaSortFor("telefono")}
+                  title={SORT_HINT}
+                >
+                  Teléfono <SortIcon dir={dirFor("telefono")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("tipoSocio")}
+                  aria-sort={ariaSortFor("tipoSocio")}
+                  title={SORT_HINT}
+                >
+                  Tipo <SortIcon dir={dirFor("tipoSocio")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("documento")}
+                  aria-sort={ariaSortFor("documento")}
+                  title={SORT_HINT}
+                >
+                  Documento <SortIcon dir={dirFor("documento")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("localidad")}
+                  aria-sort={ariaSortFor("localidad")}
+                  title={SORT_HINT}
+                >
+                  Localidad <SortIcon dir={dirFor("localidad")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("domicilio")}
+                  aria-sort={ariaSortFor("domicilio")}
+                  title={SORT_HINT}
+                >
+                  Dirección/Residencia <SortIcon dir={dirFor("domicilio")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("pagaPor")}
+                  aria-sort={ariaSortFor("pagaPor")}
+                  title={SORT_HINT}
+                >
+                  Paga por <SortIcon dir={dirFor("pagaPor")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("fechaBaja")}
+                  aria-sort={ariaSortFor("fechaBaja")}
+                  title={SORT_HINT}
+                >
+                  Baja <SortIcon dir={dirFor("fechaBaja")} />
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("deuda")}
+                  aria-sort={ariaSortFor("deuda")}
+                  title={SORT_HINT}
+                >
+                  Deuda <SortIcon dir={dirFor("deuda")} />
                 </th>
               </tr>
             </thead>
