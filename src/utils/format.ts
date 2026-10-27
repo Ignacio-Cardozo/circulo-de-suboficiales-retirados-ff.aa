@@ -93,64 +93,140 @@ export const MONTHS_SHORT = [
   "Ene", "Feb", "Mar", "Abr", "May", "Jun",
   "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
 ];
-
 export function numberToWords(n: number): string {
-    if (n === 0) return "cero";
-    const ones = ["", "un", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte"];
+    if (n === 0) return "cero pesos con cero centavos";
+    const ones = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve"];
     const tens = ["", "", "veinte", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
     const hundreds = ["", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"];
 
-    const integerPart = Math.floor(n);
-    const decimalPart = Math.round((n - integerPart) * 100);
+    const integerPart = Math.floor(Math.abs(n));
+    const decimalPart = Math.round((Math.abs(n) - integerPart) * 100);
 
-    function convertGroup(num: number): string {
+    function convertGroup(num: number, isLastGroup: boolean = false): string {
         if (num === 0) return "";
         if (num === 100) return "cien";
         let result = "";
         const h = Math.floor(num / 100);
-        const t = Math.floor((num % 100) / 10);
-        const o = num % 10;
-        if (h > 0) result += hundreds[h];
-        if (h > 0 && (t > 0 || o > 0)) result += " ";
-        if (num >= 16 && num < 20) {
-            result += ones[num];
-        } else if (o === 0 || t < 2) {
-            if (t > 0) result += tens[t];
-            if (t > 0 && o > 0) result += " y ";
-            if (o > 0) result += ones[o];
-        } else {
-            result += tens[t];
-            if (o > 0) result += " y " + ones[o];
+        const rest = num % 100;
+        if (h > 0) {
+            result += hundreds[h];
+            if (rest > 0) result += " ";
         }
-        return result;
+        if (rest === 0) return result.trim();
+        if (rest >= 10 && rest <= 19) {
+            result += ones[rest];
+            return result.trim();
+        }
+        if (rest >= 20 && rest <= 29) {
+            const o = rest % 10;
+            if (o === 0) result += "veinte";
+            else if (o === 1) result += "veintiún";
+            else if (o === 2) result += "veintidós";
+            else if (o === 3) result += "veintitrés";
+            else if (o === 4) result += "veinticuatro";
+            else if (o === 5) result += "veinticinco";
+            else if (o === 6) result += "veintiséis";
+            else if (o === 7) result += "veintisiete";
+            else if (o === 8) result += "veintiocho";
+            else if (o === 9) result += "veintinueve";
+            return result.trim();
+        }
+        const t = Math.floor(rest / 10);
+        const o = rest % 10;
+        if (t > 0) result += tens[t];
+        if (t > 0 && o > 0) result += " y ";
+        if (o > 0) {
+            if (!isLastGroup && o === 1 && num < 100) {
+                result += "uno";
+            } else if (isLastGroup && o === 1 && num < 100) {
+                result += "un";
+            } else {
+                result += ones[o];
+            }
+        }
+        return result.trim();
     }
 
-    if (integerPart === 0) return "cero";
+    if (integerPart === 0) {
+        let decWords = "";
+        if (decimalPart > 0) {
+            const decOnes = decimalPart % 10;
+            const decTens = Math.floor(decimalPart / 10);
+            if (decimalPart >= 10 && decimalPart <= 19) {
+                decWords = ones[decimalPart];
+            } else if (decimalPart >= 20 && decimalPart <= 29) {
+                const o = decimalPart % 10;
+                if (o === 0) decWords = "veinte";
+                else if (o === 1) decWords = "veintiún";
+                else if (o === 2) decWords = "veintidós";
+                else if (o === 3) decWords = "veintitrés";
+                else if (o === 4) decWords = "veinticuatro";
+                else if (o === 5) decWords = "veinticinco";
+                else if (o === 6) decWords = "veintiséis";
+                else if (o === 7) decWords = "veintisiete";
+                else if (o === 8) decWords = "veintiocho";
+                else if (o === 9) decWords = "veintinueve";
+            } else {
+                if (decTens > 0) decWords += tens[decTens];
+                if (decTens > 0 && decOnes > 0) decWords += " y ";
+                if (decOnes > 0) decWords += ones[decOnes];
+            }
+            return "cero pesos con " + decWords + " centavos";
+        }
+        return "cero pesos con cero centavos";
+    }
 
     let result = "";
     const millions = Math.floor(integerPart / 1000000);
     const thousands = Math.floor((integerPart % 1000000) / 1000);
     const remainder = integerPart % 1000;
 
-    if (millions === 1) result += "un millón";
-    else if (millions > 1) result += convertGroup(millions) + " millones";
-
-    if (thousands > 0) {
-        if (thousands === 1) result += (result ? " " : "") + "mil";
-        else result += (result ? " " : "") + convertGroup(thousands) + " mil";
+    if (millions > 0) {
+        if (millions === 1) {
+            result += "un millón";
+        } else {
+            const mWords = convertGroup(millions, false);
+            result += mWords + " millones";
+        }
     }
 
-    if (remainder > 0) result += (result ? " " : "") + convertGroup(remainder);
+    if (thousands > 0) {
+        if (result) result += " ";
+        if (thousands === 1) {
+            result += "mil";
+        } else {
+            const tWords = convertGroup(thousands, false);
+            result += tWords + " mil";
+        }
+    }
+
+    if (remainder > 0) {
+        if (result) result += " ";
+        const rWords = convertGroup(remainder, true);
+        result += rWords;
+    }
 
     result += " pesos";
 
     if (decimalPart > 0) {
-        const decOnes = decimalPart % 10;
-        const decTens = Math.floor(decimalPart / 10);
         let decWords = "";
-        if (decTens === 1) {
-            decWords = ["diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve"][decOnes];
+        if (decimalPart >= 10 && decimalPart <= 19) {
+            decWords = ones[decimalPart];
+        } else if (decimalPart >= 20 && decimalPart <= 29) {
+            const o = decimalPart % 10;
+            if (o === 0) decWords = "veinte";
+            else if (o === 1) decWords = "veintiún";
+            else if (o === 2) decWords = "veintidós";
+            else if (o === 3) decWords = "veintitrés";
+            else if (o === 4) decWords = "veinticuatro";
+            else if (o === 5) decWords = "veinticinco";
+            else if (o === 6) decWords = "veintiséis";
+            else if (o === 7) decWords = "veintisiete";
+            else if (o === 8) decWords = "veintiocho";
+            else if (o === 9) decWords = "veintinueve";
         } else {
+            const decOnes = decimalPart % 10;
+            const decTens = Math.floor(decimalPart / 10);
             if (decTens > 0) decWords += tens[decTens];
             if (decTens > 0 && decOnes > 0) decWords += " y ";
             if (decOnes > 0) decWords += ones[decOnes];
@@ -158,6 +234,10 @@ export function numberToWords(n: number): string {
         result += " con " + decWords + " centavos";
     } else {
         result += " con cero centavos";
+    }
+
+    if (n < 0) {
+        result = "menos " + result;
     }
 
     return result;
