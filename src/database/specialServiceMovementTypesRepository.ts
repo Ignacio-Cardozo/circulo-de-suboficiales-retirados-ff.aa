@@ -36,6 +36,7 @@ export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
         includes_movement: true,
         movement_type: "ingreso",
         sort_order: 0,
+        is_default: true,
     },
     {
         key: "pago",
@@ -43,6 +44,7 @@ export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
         includes_movement: true,
         movement_type: "ingreso",
         sort_order: 1,
+        is_default: true,
     },
     {
         key: "devolucion_seguro",
@@ -50,6 +52,15 @@ export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
         includes_movement: true,
         movement_type: "egreso",
         sort_order: 2,
+        is_default: true,
+    },
+    {
+        key: "pago_de_seguro",
+        label: "Pago de Seguro",
+        includes_movement: true,
+        movement_type: "ingreso",
+        sort_order: 3,
+        is_default: true,
     },
 ];
 
@@ -108,14 +119,15 @@ export async function migrateSpecialServiceMovementTypesSchema(): Promise<void> 
         for (const movementType of DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES) {
             await sql`
                 INSERT INTO special_service_movement_types (
-                    key, label, includes_movement, movement_type, sort_order
+                    key, label, includes_movement, movement_type, sort_order, is_default
                 )
                 VALUES (
                     ${movementType.key},
                     ${movementType.label},
                     ${movementType.includes_movement},
                     ${movementType.movement_type},
-                    ${movementType.sort_order}
+                    ${movementType.sort_order},
+                    ${movementType.is_default ?? true}
                 )
                 ON CONFLICT (key) DO NOTHING
             `;

@@ -47,6 +47,7 @@ export const DEFAULT_SPECIAL_SERVICE_STATUSES: Array<
         movement_type: "ingreso",
         movement_type_key: null,
         sort_order: 0,
+        is_default: true,
     },
     {
         key: "senado",
@@ -56,6 +57,17 @@ export const DEFAULT_SPECIAL_SERVICE_STATUSES: Array<
         movement_type: "ingreso",
         movement_type_key: "sena",
         sort_order: 1,
+        is_default: true,
+    },
+    {
+        key: "pago_del_seguro",
+        label: "Pago del Seguro",
+        color: "#d18923",
+        includes_movement: true,
+        movement_type: "ingreso",
+        movement_type_key: "pago_de_seguro",
+        sort_order: 2,
+        is_default: true,
     },
     {
         key: "pago",
@@ -64,7 +76,8 @@ export const DEFAULT_SPECIAL_SERVICE_STATUSES: Array<
         includes_movement: true,
         movement_type: "ingreso",
         movement_type_key: "pago",
-        sort_order: 2,
+        sort_order: 3,
+        is_default: true,
     },
     {
         key: "completado",
@@ -73,7 +86,8 @@ export const DEFAULT_SPECIAL_SERVICE_STATUSES: Array<
         includes_movement: false,
         movement_type: "ingreso",
         movement_type_key: null,
-        sort_order: 3,
+        sort_order: 4,
+        is_default: true,
     },
     {
         key: "pendiente_devolucion_seguro",
@@ -82,7 +96,8 @@ export const DEFAULT_SPECIAL_SERVICE_STATUSES: Array<
         includes_movement: true,
         movement_type: "egreso",
         movement_type_key: "devolucion_seguro",
-        sort_order: 4,
+        sort_order: 5,
+        is_default: true,
     },
 ];
 
@@ -191,7 +206,7 @@ export async function migrateSpecialServiceStatusesSchema(): Promise<void> {
         for (const status of DEFAULT_SPECIAL_SERVICE_STATUSES) {
             await sql`
                 INSERT INTO special_service_statuses (
-                    key, label, color, includes_movement, movement_type, movement_type_key, sort_order
+                    key, label, color, includes_movement, movement_type, movement_type_key, sort_order, is_default
                 )
                 VALUES (
                     ${status.key},
@@ -200,7 +215,8 @@ export async function migrateSpecialServiceStatusesSchema(): Promise<void> {
                     ${status.includes_movement},
                     ${status.movement_type},
                     ${status.movement_type_key},
-                    ${status.sort_order}
+                    ${status.sort_order},
+                    ${status.is_default ?? true}
                 )
                 ON CONFLICT (key) DO NOTHING
             `;
