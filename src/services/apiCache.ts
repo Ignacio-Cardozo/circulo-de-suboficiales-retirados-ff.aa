@@ -13,6 +13,7 @@ export const CACHE_KEY = {
     receiptConcepts: "receipt-concepts",
     externalServices: "external-services",
     services: "services",
+    specialServices: "special-services",
     duesConfig: "dues-config",
     membersDebtStatus: "members-debt-status",
 } as const;

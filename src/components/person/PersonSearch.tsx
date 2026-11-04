@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { Search, User, X } from "lucide-react";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import type { Member, Person } from "../../models/members";
+import "./PersonSearch.css";
 
 interface PersonSearchProps {
   type: "socio" | "persona";
@@ -44,7 +45,7 @@ const PersonSearch: React.FC<PersonSearchProps> = ({
   const isError = touched && !!error;
 
   return (
-    <div className="member-search-wrapper" ref={wrapperRef}>
+    <div className="member-search-wrapper person-search" ref={wrapperRef}>
       <div className="input-with-icon">
         <input autoComplete="off"
           type="text"
@@ -63,7 +64,7 @@ const PersonSearch: React.FC<PersonSearchProps> = ({
       </div>
 
       {showDropdown && results.length > 0 && !selected && (
-        <div className="member-dropdown">
+        <div className="member-dropdown custom-scroll">
           {results.map((p) => (
             <button
               type="button"

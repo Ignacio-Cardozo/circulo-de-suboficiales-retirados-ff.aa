@@ -42,6 +42,21 @@ export function formatNumberInput(n: number): string {
   }).format(n);
 }
 
+export function formatMoneyInput(raw: string): string {
+  const cleaned = raw.replace(/[^\d,]/g, "");
+  const hasComma = cleaned.includes(",");
+  const firstComma = cleaned.indexOf(",");
+  let intPart = cleaned;
+  let decPart = "";
+  if (hasComma) {
+    intPart = cleaned.slice(0, firstComma);
+    decPart = cleaned.slice(firstComma + 1).replace(/,/g, "").slice(0, 2);
+  }
+  intPart = intPart.replace(/\D/g, "");
+  const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return hasComma ? `${withThousands},${decPart}` : withThousands;
+}
+
 export function formatPeriodsDisplay(periods: string[] | null): string {
   if (!periods || periods.length === 0) return "\u2014";
   const byYear: Record<string, string[]> = {};

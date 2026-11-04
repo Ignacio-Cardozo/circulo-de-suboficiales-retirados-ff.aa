@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import { Calendar } from "lucide-react";
+import "./DateInput.css";
 
 interface DateInputProps {
   value: string;

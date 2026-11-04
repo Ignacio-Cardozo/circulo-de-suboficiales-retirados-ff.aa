@@ -13,6 +13,10 @@ import {
     type ExternalServiceItem,
 } from "../../services/externalServicesApi";
 import {
+    fetchSpecialServices,
+    type SpecialServiceItem,
+} from "../../services/specialServicesApi";
+import {
     fetchReceiptConcepts,
     type ReceiptConcept,
 } from "../../services/receiptCopiesConfigApi";
@@ -22,6 +26,9 @@ import BalancesConfig from "./BalancesConfig";
 import DuesConfig from "./DuesConfig";
 import ServicesConfig from "./ServicesConfig";
 import ExternalServicesConfig from "./ExternalServicesConfig";
+import SpecialServicesConfig from "./SpecialServicesConfig";
+import SpecialServiceStatusesConfig from "./SpecialServiceStatusesConfig";
+import SpecialServiceMovementTypesConfig from "./SpecialServiceMovementTypesConfig";
 import ReceiptCopiesConfig from "./ReceiptCopiesConfig";
 import "./Config.css";
 
@@ -50,6 +57,7 @@ const Variables: React.FC = () => {
     const [feeVit, setFeeVit] = useState("0");
     const [services, setServices] = useState<ServiceItem[]>([]);
     const [externalServices, setExternalServices] = useState<ExternalServiceItem[]>([]);
+    const [specialServices, setSpecialServices] = useState<SpecialServiceItem[]>([]);
     const [receiptConcepts, setReceiptConcepts] = useState<ReceiptConcept[]>([]);
 
     useEffect(() => {
@@ -58,9 +66,10 @@ const Variables: React.FC = () => {
             fetchDuesConfig(),
             fetchServices(),
             fetchExternalServices(),
+            fetchSpecialServices(),
             fetchReceiptConcepts(),
         ])
-            .then(([balances, duesCfg, svcs, extSvcs, receiptCfg]) => {
+            .then(([balances, duesCfg, svcs, extSvcs, specialSvcs, receiptCfg]) => {
                 if (balances) {
                     setCajaChica(formatNumberInput(balances.caja_chica));
                     setBanco(formatNumberInput(balances.banco));
@@ -86,6 +95,7 @@ const Variables: React.FC = () => {
                 }
                 setServices(svcs);
                 setExternalServices(extSvcs);
+                setSpecialServices(specialSvcs);
                 setReceiptConcepts(receiptCfg);
             })
             .catch((err) => setError(err.message || "Error al cargar datos"))
@@ -145,6 +155,30 @@ const Variables: React.FC = () => {
                     headerExtra={<span className="config-card-hint">Configurar servicios que generan egresos</span>}
                 >
                     <ExternalServicesConfig initialServices={externalServices} />
+                </CollapsibleCard>
+                <CollapsibleCard
+                    title="Servicios Especiales"
+                    className="config-card"
+                    defaultOpen={false}
+                    headerExtra={<span className="config-card-hint">Catálogo de servicios especiales, precios y señas</span>}
+                >
+                    <SpecialServicesConfig initialServices={specialServices} />
+                </CollapsibleCard>
+                <CollapsibleCard
+                    title="Estados de Servicios Especiales"
+                    className="config-card"
+                    defaultOpen={false}
+                    headerExtra={<span className="config-card-hint">Nombres y colores de los estados</span>}
+                >
+                    <SpecialServiceStatusesConfig />
+                </CollapsibleCard>
+                <CollapsibleCard
+                    title="Movimientos de Servicios Especiales"
+                    className="config-card"
+                    defaultOpen={false}
+                    headerExtra={<span className="config-card-hint">Tipos, dirección e impacto en caja</span>}
+                >
+                    <SpecialServiceMovementTypesConfig />
                 </CollapsibleCard>
                 <CollapsibleCard
                     title="Valores Ingresos/Egresos, Comprobantes"

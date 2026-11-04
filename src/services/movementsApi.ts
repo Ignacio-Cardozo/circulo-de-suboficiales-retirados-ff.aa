@@ -1,4 +1,5 @@
 import type { ComprobanteRecord } from "./comprobantesApi";
+import type { SpecialServiceRecordItem } from "./specialServiceRecordsApi";
 
 export interface DueLink {
     id: string;
@@ -57,6 +58,7 @@ export interface Movement {
     linked_due?: DueLink | null;
     linked_service_records?: ServiceRecordLink[];
     linked_cementerio_movimientos?: CementerioMovimientoLink[];
+    linked_special_service_records?: SpecialServiceRecordItem[];
 }
 
 export async function fetchMovements(): Promise<Movement[]> {

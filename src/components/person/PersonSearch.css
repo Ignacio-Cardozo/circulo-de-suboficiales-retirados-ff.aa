@@ -1,0 +1,27 @@
+/* Estilos aislados del buscador de personas para evitar fugas de CSS de otras páginas. */
+.member-search-wrapper.person-search {
+  position: relative;
+  width: 100%;
+}
+
+.member-search-wrapper.person-search .input-with-icon {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.member-search-wrapper.person-search .input-with-icon .form-control {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 40px 8px 12px;
+}
+
+.member-search-wrapper.person-search .input-with-icon .input-icon {
+  position: absolute;
+  left: auto;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}

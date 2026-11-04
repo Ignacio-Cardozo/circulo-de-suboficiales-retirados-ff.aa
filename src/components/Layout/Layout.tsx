@@ -31,6 +31,7 @@ const Layout: React.FC = () => {
     if (path === "/tesoreria/servicios-externos") return { title: "Servicios Externos / Impuestos", subtitle: "Estado de pagos de servicios e impuestos.", breadcrumbs: ["Tesorería", "Servicios Externos"] };
     if (path === "/tesoreria/cementerio") return { title: "Cementerio", subtitle: "Gestión de nichos y pagos de cementerio.", breadcrumbs: ["Tesorería", "Cementerio"] };
     if (path === "/tesoreria/historial-servicios") return { title: "Historial de Servicios", subtitle: "Consulta del historial de servicios facturados.", breadcrumbs: ["Tesorería", "Historial de Servicios"] };
+    if (path === "/calendario") return { title: "Calendario", subtitle: "Visualizá los servicios agendados y los próximos servicios.", breadcrumbs: ["Calendario"] };
     return { title: "Sistema de Gestión" };
   };
 

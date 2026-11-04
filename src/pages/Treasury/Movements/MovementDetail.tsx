@@ -7,9 +7,12 @@ import { fetchDebtByMovement, fetchBalanceByMember, type DebtWithDetails } from 
 import type { Member } from "../../../models/members";
 import ServiceRecordModal from "../../../components/service/ServiceRecordModal";
 import Comprobante from "../../../components/comprobante/Comprobante";
+import SpecialServiceRecordDetailModal from "../../Calendario/SpecialServiceRecordDetailModal";
+import type { SpecialServiceRecordItem } from "../../../services/specialServiceRecordsApi";
 import { toCurrency, formatPeriodsDisplay, formatRecordDate } from "../../../utils/format";
 import "../TreasuryTables.css";
 import "../ServiceHistory/ServiceHistory.css";
+import "../../Calendario/Calendario.css";
 import "./MovementDetail.css";
 
 const MovementDetail: React.FC = () => {
@@ -22,6 +25,7 @@ const MovementDetail: React.FC = () => {
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [paidMemberNames, setPaidMemberNames] = useState<{ id: string; nombre: string }[]>([]);
     const [selectedServiceRecord, setSelectedServiceRecord] = useState<ServiceRecordLink | null>(null);
+    const [selectedSpecialServiceRecord, setSelectedSpecialServiceRecord] = useState<SpecialServiceRecordItem | null>(null);
     const [showComprobante, setShowComprobante] = useState(false);
     const [linkedDebt, setLinkedDebt] = useState<DebtWithDetails | null>(null);
     const [haberesMember, setHaberesMember] = useState<Member | null>(null);
@@ -101,7 +105,8 @@ const MovementDetail: React.FC = () => {
     const hasLinkedDue = !!movement.linked_due;
     const hasServiceRecords = (movement.linked_service_records?.length ?? 0) > 0;
     const hasCementerioMovimientos = (movement.linked_cementerio_movimientos?.length ?? 0) > 0;
-    const hasAnyLinked = hasLinkedDue || hasServiceRecords || hasCementerioMovimientos;
+    const hasSpecialServiceRecords = (movement.linked_special_service_records?.length ?? 0) > 0;
+    const hasAnyLinked = hasLinkedDue || hasServiceRecords || hasCementerioMovimientos || hasSpecialServiceRecords;
     const isHaberesConcept = (movement.concept ?? "").toLowerCase() === "adelanto de haberes" || (movement.concept ?? "").toLowerCase() === "pago de haberes";
 
     return (
@@ -198,6 +203,28 @@ const MovementDetail: React.FC = () => {
                         </>
                     )}
 
+                    {hasSpecialServiceRecords && (
+                        <>
+                            <div className="detail-field separator-row" style={{ gridColumn: "1 / -1" }}><hr /></div>
+                            <div className="detail-field" style={{ gridColumn: "1 / -1" }}><span className="detail-label due-label">Servicios especiales vinculados</span></div>
+                            <div style={{ gridColumn: "1 / -1" }}>
+                                <table className="treasury-table" style={{ minWidth: 0 }}>
+                                    <thead><tr><th>Servicio</th><th>Titular</th><th>Importe</th><th>Fecha</th></tr></thead>
+                                    <tbody>
+                                        {movement.linked_special_service_records!.map((record) => (
+                                            <tr key={record.id} className="clickable-row" onClick={() => setSelectedSpecialServiceRecord(record)}>
+                                                <td>{record.special_service_name ?? "\u2014"}</td>
+                                                <td>{record.member_nombre ? `${record.member_nombre}${record.member_numero_de_socio ? ` (N\u00BA ${record.member_numero_de_socio})` : ""}` : record.person_nombre ?? "\u2014"}</td>
+                                                <td className={record.amount >= 0 ? "amount-ingreso" : "amount-egreso"}>{toCurrency(record.amount)}</td>
+                                                <td>{formatRecordDate(record.date)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
+
                     {hasCementerioMovimientos && (
                         <>
                             <div className="detail-field separator-row" style={{ gridColumn: "1 / -1" }}><hr /></div>
@@ -284,6 +311,46 @@ const MovementDetail: React.FC = () => {
                     else if (personId) navigate(`/terceros/detalle/${personId}`);
                 }}
             />
+
+            {selectedSpecialServiceRecord && (
+                <SpecialServiceRecordDetailModal
+                    key={selectedSpecialServiceRecord.id}
+                    record={selectedSpecialServiceRecord}
+                    onClose={() => setSelectedSpecialServiceRecord(null)}
+                    onUpdated={(record) => {
+                        setSelectedSpecialServiceRecord(record);
+                        setMovement((prev) =>
+                            prev
+                                ? {
+                                      ...prev,
+                                      linked_special_service_records: prev.linked_special_service_records?.map((item) =>
+                                          item.id === record.id ? record : item
+                                      ),
+                                  }
+                                : prev
+                        );
+                    }}
+                    onCancelled={(record) => {
+                        setSelectedSpecialServiceRecord(record);
+                        setMovement((prev) =>
+                            prev
+                                ? {
+                                      ...prev,
+                                      anulado: true,
+                                      linked_special_service_records: prev.linked_special_service_records?.map((item) =>
+                                          item.id === record.id ? record : item
+                                      ),
+                                  }
+                                : prev
+                        );
+                    }}
+                    onNavigateToMovement={(movementId) => navigate(`/tesoreria/movimientos/detalle/${movementId}`)}
+                    onNavigateToTitular={(memberId, personId) => {
+                        if (memberId) navigate(`/socios/detalle/${memberId}`);
+                        else if (personId) navigate(`/terceros/detalle/${personId}`);
+                    }}
+                />
+            )}
 
             {showComprobante && movement.comprobante != null && (
                 <Comprobante

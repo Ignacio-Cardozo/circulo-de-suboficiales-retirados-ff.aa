@@ -37,6 +37,12 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
         const isDuesConfigHistory = pathname === "/api/dues-config/history";
         const isServices = pathname === "/api/services";
         const isServiceRecords = pathname === "/api/service-records";
+        const isSpecialServices = pathname === "/api/special-services";
+        const isSpecialServiceAddons = pathname === "/api/special-service-addons";
+        const isSpecialServiceStatuses = pathname === "/api/special-service-statuses";
+        const isSpecialServiceMovementTypes = pathname === "/api/special-service-movement-types";
+        const isSpecialServiceRecordMovements = pathname === "/api/special-service-record-movements";
+        const isSpecialServiceRecords = pathname === "/api/special-service-records";
         const isCementerioMovimientos = pathname === "/api/cementerio-movimientos";
         const isUsers = pathname === "/api/users";
         const isVitalicios = pathname === "/api/members/vitalicios";
@@ -50,7 +56,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
         const isReceiptCopiesConfig = pathname === "/api/receipt-copies-config";
         const isFrontendErrors = pathname === "/api/frontend-errors";
 
-        if (!isMembers && !isMembersSearch && !isMembersFamily && !isMembersDebt && !isPersons && !isServiceProviders && !isMovements && !isMovement && !isMember && !isPerson && !isPersonMembers && !isInitialBalances && !isPayment && !isCementerios && !isDues && !isDuesConfig && !isDuesConfigHistory && !isServices && !isServiceRecords && !isCementerioMovimientos && !isUsers && !isVitalicios && !isDebts && !isDebtsBalance && !isExternalServices && !isExternalServicePayments && !isReceiptNext && !isComprobante && !isReceiptCopiesConfig && !isFrontendErrors) {
+        if (!isMembers && !isMembersSearch && !isMembersFamily && !isMembersDebt && !isPersons && !isServiceProviders && !isMovements && !isMovement && !isMember && !isPerson && !isPersonMembers && !isInitialBalances && !isPayment && !isCementerios && !isDues && !isDuesConfig && !isDuesConfigHistory && !isServices && !isServiceRecords && !isSpecialServices && !isSpecialServiceAddons && !isSpecialServiceStatuses && !isSpecialServiceMovementTypes && !isSpecialServiceRecordMovements && !isSpecialServiceRecords && !isCementerioMovimientos && !isUsers && !isVitalicios && !isDebts && !isDebtsBalance && !isExternalServices && !isExternalServicePayments && !isReceiptNext && !isComprobante && !isReceiptCopiesConfig && !isFrontendErrors) {
           next();
           return;
         }
@@ -143,6 +149,8 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
             const { getServiceRecordsByMovement } = await import("./src/database/serviceRecordsRepository");
             const { getCementerioMovimientosByMovement } = await import("./src/database/cementerioMovimientosRepository");
             const { getComprobanteByMovementId } = await import("./src/database/comprobantesRepository");
+            const { getSpecialServiceRecordsByMovement } = await import("./src/database/specialServiceRecordsRepository");
+            const { migrateSpecialServiceMovementTypesSchema } = await import("./src/database/specialServiceMovementTypesRepository");
             const id = url.searchParams.get("id") ?? undefined;
 
             if (req.method === "GET") {
@@ -157,14 +165,16 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 res.end(JSON.stringify({ error: "Movimiento no encontrado" }));
                 return;
               }
-              const [due, serviceRecords, cementerioMovimientos, comprobante] = await Promise.all([
+              await migrateSpecialServiceMovementTypesSchema();
+              const [due, serviceRecords, cementerioMovimientos, comprobante, specialServiceRecords] = await Promise.all([
                 getDueByMovementId(id),
                 getServiceRecordsByMovement(id),
                 getCementerioMovimientosByMovement(id),
                 getComprobanteByMovementId(id),
+                getSpecialServiceRecordsByMovement(id),
               ]);
               res.statusCode = 200;
-              res.end(JSON.stringify({ ...movement, linked_due: due, linked_service_records: serviceRecords, linked_cementerio_movimientos: cementerioMovimientos, comprobante }));
+              res.end(JSON.stringify({ ...movement, linked_due: due, linked_service_records: serviceRecords, linked_cementerio_movimientos: cementerioMovimientos, linked_special_service_records: specialServiceRecords, comprobante }));
               return;
             }
 
@@ -869,6 +879,630 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
               await deleteServiceRecord(id);
               res.statusCode = 200;
               res.end(JSON.stringify({ success: true }));
+              return;
+            }
+
+            if (req.method === "OPTIONS") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+
+            res.statusCode = 405;
+            res.end(JSON.stringify({ error: "Método no permitido" }));
+            return;
+          }
+
+          if (isSpecialServices) {
+            const {
+              getAllSpecialServices,
+              insertSpecialService,
+              updateSpecialService,
+              deleteSpecialService,
+            } = await import("./src/database/specialServicesRepository");
+
+            if (req.method === "GET") {
+              const services = await getAllSpecialServices();
+              res.statusCode = 200;
+              res.end(JSON.stringify(services));
+              return;
+            }
+
+            if (req.method === "POST") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.name?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el nombre del servicio especial" }));
+                return;
+              }
+              const result = await insertSpecialService({
+                name: body.name.trim(),
+                detail: body.detail?.trim() || null,
+                member_price: body.member_price ?? 0,
+                person_price: body.person_price ?? 0,
+                deposit_cost: body.deposit_cost ?? 0,
+              });
+              res.statusCode = 201;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "PUT") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.id || !body?.name?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Faltan parámetros id y/o name" }));
+                return;
+              }
+              const result = await updateSpecialService(body.id, {
+                name: body.name.trim(),
+                detail: body.detail?.trim() || null,
+                member_price: body.member_price ?? 0,
+                person_price: body.person_price ?? 0,
+                deposit_cost: body.deposit_cost ?? 0,
+              });
+              if (!result) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: "Servicio especial no encontrado" }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "DELETE") {
+              const id = url.searchParams.get("id");
+              if (!id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro id" }));
+                return;
+              }
+              await deleteSpecialService(id);
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true }));
+              return;
+            }
+
+            if (req.method === "OPTIONS") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+
+            res.statusCode = 405;
+            res.end(JSON.stringify({ error: "Método no permitido" }));
+            return;
+          }
+
+          if (isSpecialServiceAddons) {
+            const {
+              getAllSpecialServiceAddons,
+              getSpecialServiceAddonsByService,
+              insertSpecialServiceAddon,
+              updateSpecialServiceAddon,
+              deleteSpecialServiceAddon,
+            } = await import("./src/database/specialServiceAddonsRepository");
+
+            if (req.method === "GET") {
+              const serviceId = url.searchParams.get("serviceId");
+              const addons = serviceId
+                ? await getSpecialServiceAddonsByService(serviceId)
+                : await getAllSpecialServiceAddons();
+              res.statusCode = 200;
+              res.end(JSON.stringify(addons));
+              return;
+            }
+
+            if (req.method === "POST") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.special_service_id || !body?.name?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Faltan el servicio especial y/o el nombre del añadido" }));
+                return;
+              }
+              const result = await insertSpecialServiceAddon({
+                special_service_id: body.special_service_id,
+                name: body.name.trim(),
+                cost: body.cost ?? 0,
+              });
+              res.statusCode = 201;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "PUT") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.id || !body?.name?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Faltan parámetros id y/o name" }));
+                return;
+              }
+              const result = await updateSpecialServiceAddon(body.id, {
+                name: body.name.trim(),
+                cost: body.cost ?? 0,
+              });
+              if (!result) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: "Añadido no encontrado" }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "DELETE") {
+              const id = url.searchParams.get("id");
+              if (!id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro id" }));
+                return;
+              }
+              await deleteSpecialServiceAddon(id);
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true }));
+              return;
+            }
+
+            if (req.method === "OPTIONS") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+
+            res.statusCode = 405;
+            res.end(JSON.stringify({ error: "Método no permitido" }));
+            return;
+          }
+
+          if (isSpecialServiceStatuses) {
+            const {
+              getAllSpecialServiceStatuses,
+              insertSpecialServiceStatus,
+              updateSpecialServiceStatus,
+              deleteSpecialServiceStatus,
+              reorderSpecialServiceStatus,
+            } = await import("./src/database/specialServiceStatusesRepository");
+
+            if (req.method === "GET") {
+              const statuses = await getAllSpecialServiceStatuses();
+              res.statusCode = 200;
+              res.end(JSON.stringify(statuses));
+              return;
+            }
+
+            if (req.method === "POST") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.label?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el nombre del estado" }));
+                return;
+              }
+              const color = typeof body.color === "string" && body.color.trim() ? body.color.trim() : "#475569";
+              if (!/^#[0-9a-f]{6}$/i.test(color)) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Color de estado inválido" }));
+                return;
+              }
+              const result = await insertSpecialServiceStatus({
+                label: body.label.trim(),
+                color,
+                includes_movement: body.includes_movement !== false,
+                movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+                movement_type_key:
+                  typeof body.movement_type_key === "string" && body.movement_type_key
+                    ? body.movement_type_key
+                    : null,
+              });
+              res.statusCode = 201;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "PUT") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.key || !body?.label?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Faltan parámetros key y/o label" }));
+                return;
+              }
+              const color = typeof body.color === "string" ? body.color.trim() : "";
+              if (!/^#[0-9a-f]{6}$/i.test(color)) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Color de estado inválido" }));
+                return;
+              }
+              const result = await updateSpecialServiceStatus(body.key, {
+                label: body.label.trim(),
+                color,
+                includes_movement: body.includes_movement !== false,
+                movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+                movement_type_key:
+                  typeof body.movement_type_key === "string" && body.movement_type_key
+                    ? body.movement_type_key
+                    : null,
+              });
+              if (!result) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: "Estado no encontrado" }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "PATCH") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.key || typeof body.position !== "number") {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Faltan parámetros key y/o position" }));
+                return;
+              }
+              const statuses = await reorderSpecialServiceStatus(body.key, body.position);
+              res.statusCode = 200;
+              res.end(JSON.stringify(statuses));
+              return;
+            }
+
+            if (req.method === "DELETE") {
+              const key = url.searchParams.get("key");
+              if (!key) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro key" }));
+                return;
+              }
+              try {
+                await deleteSpecialServiceStatus(key);
+              } catch (error) {
+                res.statusCode = 409;
+                res.end(
+                  JSON.stringify({
+                    error: error instanceof Error ? error.message : "No se pudo eliminar el estado",
+                  })
+                );
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true }));
+              return;
+            }
+
+            if (req.method === "OPTIONS") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+
+            res.statusCode = 405;
+            res.end(JSON.stringify({ error: "Método no permitido" }));
+            return;
+          }
+
+          if (isSpecialServiceMovementTypes) {
+            const {
+              getAllSpecialServiceMovementTypes,
+              insertSpecialServiceMovementType,
+              updateSpecialServiceMovementType,
+              deleteSpecialServiceMovementType,
+            } = await import("./src/database/specialServiceMovementTypesRepository");
+
+            if (req.method === "GET") {
+              const movementTypes = await getAllSpecialServiceMovementTypes();
+              res.statusCode = 200;
+              res.end(JSON.stringify(movementTypes));
+              return;
+            }
+
+            if (req.method === "POST") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.label?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el nombre del movimiento" }));
+                return;
+              }
+              const result = await insertSpecialServiceMovementType({
+                label: body.label.trim(),
+                includes_movement: body.includes_movement !== false,
+                movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+              });
+              res.statusCode = 201;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "PUT") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.key || !body?.label?.trim()) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Faltan parámetros key y/o label" }));
+                return;
+              }
+              const result = await updateSpecialServiceMovementType(body.key, {
+                label: body.label.trim(),
+                includes_movement: body.includes_movement !== false,
+                movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+              });
+              if (!result) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: "Movimiento no encontrado" }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "DELETE") {
+              const key = url.searchParams.get("key");
+              if (!key) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro key" }));
+                return;
+              }
+              try {
+                await deleteSpecialServiceMovementType(key);
+              } catch (error) {
+                res.statusCode = 409;
+                res.end(
+                  JSON.stringify({
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "No se pudo eliminar el movimiento",
+                  })
+                );
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true }));
+              return;
+            }
+
+            if (req.method === "OPTIONS") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+
+            res.statusCode = 405;
+            res.end(JSON.stringify({ error: "Método no permitido" }));
+            return;
+          }
+
+          if (isSpecialServiceRecordMovements) {
+            const {
+              getSpecialServiceRecordMovements,
+              insertSpecialServiceRecordMovement,
+              deleteSpecialServiceRecordMovement,
+            } = await import("./src/database/specialServiceMovementTypesRepository");
+
+            if (req.method === "GET") {
+              const recordId = url.searchParams.get("recordId");
+              if (!recordId) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro recordId" }));
+                return;
+              }
+              const movements = await getSpecialServiceRecordMovements(recordId);
+              res.statusCode = 200;
+              res.end(JSON.stringify(movements));
+              return;
+            }
+
+            if (req.method === "POST") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.record_id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el registro de servicio especial" }));
+                return;
+              }
+              if (!body?.date) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta la fecha del movimiento" }));
+                return;
+              }
+              try {
+                const result = await insertSpecialServiceRecordMovement({
+                  record_id: body.record_id,
+                  movement_type_key: body.movement_type_key ?? null,
+                  label: typeof body.label === "string" ? body.label : undefined,
+                  movement_type:
+                    body.movement_type === "egreso"
+                      ? "egreso"
+                      : body.movement_type === "ingreso"
+                        ? "ingreso"
+                        : undefined,
+                  includes_movement:
+                    typeof body.includes_movement === "boolean"
+                      ? body.includes_movement
+                      : undefined,
+                  amount: Number(body.amount) || 0,
+                  date: body.date,
+                  mode: body.mode === "transferencia" ? "transferencia" : "efectivo",
+                });
+                res.statusCode = 201;
+                res.end(JSON.stringify(result));
+              } catch (error) {
+                res.statusCode = 400;
+                res.end(
+                  JSON.stringify({
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "No se pudo registrar el movimiento",
+                  })
+                );
+              }
+              return;
+            }
+
+            if (req.method === "DELETE") {
+              const id = url.searchParams.get("id");
+              if (!id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro id" }));
+                return;
+              }
+              await deleteSpecialServiceRecordMovement(id);
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true }));
+              return;
+            }
+
+            if (req.method === "OPTIONS") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+
+            res.statusCode = 405;
+            res.end(JSON.stringify({ error: "Método no permitido" }));
+            return;
+          }
+
+          if (isSpecialServiceRecords) {
+            const {
+              getAllSpecialServiceRecords,
+              getSpecialServiceRecordById,
+              getSpecialServiceRecordsByMember,
+              getSpecialServiceRecordsByPerson,
+              getSpecialServiceRecordsByMovement,
+              insertSpecialServiceRecord,
+              updateSpecialServiceRecord,
+              cancelSpecialServiceRecord,
+            } = await import("./src/database/specialServiceRecordsRepository");
+            const { specialServiceStatusExists } = await import(
+              "./src/database/specialServiceStatusesRepository"
+            );
+            const { migrateSpecialServiceMovementTypesSchema } = await import(
+              "./src/database/specialServiceMovementTypesRepository"
+            );
+
+            if (req.method === "GET") {
+              const id = url.searchParams.get("id");
+              const memberId = url.searchParams.get("memberId");
+              const personId = url.searchParams.get("personId");
+              const movementId = url.searchParams.get("movementId");
+
+              if (movementId) {
+                await migrateSpecialServiceMovementTypesSchema();
+              }
+              if (id) {
+                const record = await getSpecialServiceRecordById(id);
+                if (!record) {
+                  res.statusCode = 404;
+                  res.end(JSON.stringify({ error: "Registro de servicio especial no encontrado" }));
+                  return;
+                }
+                res.statusCode = 200;
+                res.end(JSON.stringify(record));
+                return;
+              }
+              if (memberId) {
+                const records = await getSpecialServiceRecordsByMember(memberId);
+                res.statusCode = 200;
+                res.end(JSON.stringify(records));
+                return;
+              }
+              if (personId) {
+                const records = await getSpecialServiceRecordsByPerson(personId);
+                res.statusCode = 200;
+                res.end(JSON.stringify(records));
+                return;
+              }
+              if (movementId) {
+                const records = await getSpecialServiceRecordsByMovement(movementId);
+                res.statusCode = 200;
+                res.end(JSON.stringify(records));
+                return;
+              }
+
+              const records = await getAllSpecialServiceRecords();
+              res.statusCode = 200;
+              res.end(JSON.stringify(records));
+              return;
+            }
+
+            if (req.method === "POST") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.special_service_id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el servicio especial" }));
+                return;
+              }
+              if (!body?.date) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta la fecha" }));
+                return;
+              }
+              if (body.status !== undefined && !(await specialServiceStatusExists(body.status))) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Estado de servicio especial inválido" }));
+                return;
+              }
+              const result = await insertSpecialServiceRecord({
+                special_service_id: body.special_service_id,
+                member_id: body.member_id ?? null,
+                person_id: body.person_id ?? null,
+                amount: body.amount ?? 0,
+                date: body.date,
+                service_date: body.service_date ?? null,
+                status: body.status,
+                addons: Array.isArray(body.addons) ? body.addons : [],
+              });
+              res.statusCode = 201;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "PUT") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro id" }));
+                return;
+              }
+              if (body.status !== undefined && !(await specialServiceStatusExists(body.status))) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Estado de servicio especial inválido" }));
+                return;
+              }
+              const result = await updateSpecialServiceRecord(body.id, {
+                special_service_id: body.special_service_id,
+                member_id: body.member_id,
+                person_id: body.person_id,
+                amount: body.amount,
+                date: body.date,
+                service_date: body.service_date,
+                status: body.status,
+              });
+              if (!result) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: "Registro de servicio especial no encontrado" }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            if (req.method === "DELETE") {
+              const id = url.searchParams.get("id");
+              if (!id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el parámetro id" }));
+                return;
+              }
+              const result = await cancelSpecialServiceRecord(id);
+              if (!result) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: "Registro de servicio especial no encontrado" }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
               return;
             }
 
