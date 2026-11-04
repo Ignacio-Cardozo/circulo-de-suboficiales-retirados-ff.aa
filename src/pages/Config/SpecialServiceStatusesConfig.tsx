@@ -10,6 +10,7 @@ import {
 } from "../../services/specialServiceStatusesApi";
 import { useSpecialServiceMovementTypesStore } from "../../store/specialServiceMovementTypesStore";
 import { useSpecialServiceStatusesStore } from "../../store/specialServiceStatusesStore";
+import { useSpecialServiceWorkflowStore } from "../../store/specialServiceWorkflowStore";
 import { statusBadgeStyle } from "../../utils/specialServiceStatus";
 
 const DEFAULT_COLOR = "#475569";
@@ -32,6 +33,8 @@ const SpecialServiceStatusesConfig: React.FC = () => {
     const [includesMovement, setIncludesMovement] = useState(false);
     const [movementType, setMovementType] = useState<MovementDirection>("ingreso");
     const [movementTypeKey, setMovementTypeKey] = useState("");
+    const [isDefault, setIsDefault] = useState(true);
+    const clearWorkflows = useSpecialServiceWorkflowStore((state) => state.clear);
     const [editKey, setEditKey] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [reorderingKey, setReorderingKey] = useState<string | null>(null);
@@ -55,6 +58,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
         setIncludesMovement(false);
         setMovementType("ingreso");
         setMovementTypeKey("");
+        setIsDefault(true);
         setEditKey(null);
     };
 
@@ -70,6 +74,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
                 includes_movement: includesMovement,
                 movement_type: movementType,
                 movement_type_key: includesMovement ? movementTypeKey || null : null,
+                is_default: isDefault,
             };
             if (editKey) {
                 const updated = await updateSpecialServiceStatus(editKey, payload);
@@ -78,6 +83,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
                 const created = await saveSpecialServiceStatus(payload);
                 setStatuses(sortStatuses([...statuses, created]));
             }
+            clearWorkflows();
             resetForm();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Error al guardar el estado");
@@ -92,6 +98,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
         setIncludesMovement(status.includes_movement);
         setMovementType(status.movement_type);
         setMovementTypeKey(status.movement_type_key ?? "");
+        setIsDefault(status.is_default !== false);
         setEditKey(status.key);
         setError(null);
     };
@@ -108,6 +115,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
             );
             setStatuses(next);
             setOrderDrafts({});
+            clearWorkflows();
             if (editKey === status.key) resetForm();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Error al eliminar el estado");
@@ -135,6 +143,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
         try {
             const next = await reorderSpecialServiceStatus(status.key, position);
             setStatuses(next);
+            clearWorkflows();
             setOrderDrafts({});
         } catch (err) {
             setError(err instanceof Error ? err.message : "Error al reordenar los estados");
@@ -210,6 +219,17 @@ const SpecialServiceStatusesConfig: React.FC = () => {
                         ))}
                     </select>
                 </div>
+                <div className="config-field">
+                    <label>Lista base</label>
+                    <label className="special-movement-check">
+                        <input
+                            type="checkbox"
+                            checked={isDefault}
+                            onChange={(e) => setIsDefault(e.target.checked)}
+                        />
+                        <span>Incluir en la lista base de los servicios</span>
+                    </label>
+                </div>
                 {error && <div className="config-error">{error}</div>}
                 <div className="config-form-actions">
                     <button type="submit" className="config-save-btn" disabled={saving || !label.trim()}>
@@ -248,6 +268,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
                             <th>Estado</th>
                             <th>Color</th>
                             <th>Movimiento</th>
+                            <th>Lista base</th>
                             <th className="actions">Acciones</th>
                         </tr>
                     </thead>
@@ -322,6 +343,18 @@ const SpecialServiceStatusesConfig: React.FC = () => {
                                         </span>
                                     )}
                                 </td>
+                                <td>
+                                    <span
+                                        className={`special-default-badge ${status.is_default !== false ? "is-on" : "is-off"}`}
+                                        title={
+                                            status.is_default !== false
+                                                ? "Lo usan los servicios que siguen la lista base"
+                                                : "Solo disponible para servicios con lista propia"
+                                        }
+                                    >
+                                        {status.is_default !== false ? "Sí" : "No"}
+                                    </span>
+                                </td>
                                 <td className="actions">
                                     <button
                                         type="button"
@@ -356,7 +389,7 @@ const SpecialServiceStatusesConfig: React.FC = () => {
                         ))}
                         {statuses.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="svc-list-empty">
+                                <td colSpan={6} className="svc-list-empty">
                                     No hay estados configurados. Ejecutá npm run db:migrate para
                                     crear los estados por defecto.
                                 </td>

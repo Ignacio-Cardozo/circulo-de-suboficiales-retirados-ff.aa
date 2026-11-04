@@ -41,6 +41,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
         const isSpecialServiceAddons = pathname === "/api/special-service-addons";
         const isSpecialServiceStatuses = pathname === "/api/special-service-statuses";
         const isSpecialServiceMovementTypes = pathname === "/api/special-service-movement-types";
+        const isSpecialServiceWorkflow = pathname === "/api/special-service-workflow";
         const isSpecialServiceRecordMovements = pathname === "/api/special-service-record-movements";
         const isSpecialServiceRecords = pathname === "/api/special-service-records";
         const isCementerioMovimientos = pathname === "/api/cementerio-movimientos";
@@ -56,7 +57,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
         const isReceiptCopiesConfig = pathname === "/api/receipt-copies-config";
         const isFrontendErrors = pathname === "/api/frontend-errors";
 
-        if (!isMembers && !isMembersSearch && !isMembersFamily && !isMembersDebt && !isPersons && !isServiceProviders && !isMovements && !isMovement && !isMember && !isPerson && !isPersonMembers && !isInitialBalances && !isPayment && !isCementerios && !isDues && !isDuesConfig && !isDuesConfigHistory && !isServices && !isServiceRecords && !isSpecialServices && !isSpecialServiceAddons && !isSpecialServiceStatuses && !isSpecialServiceMovementTypes && !isSpecialServiceRecordMovements && !isSpecialServiceRecords && !isCementerioMovimientos && !isUsers && !isVitalicios && !isDebts && !isDebtsBalance && !isExternalServices && !isExternalServicePayments && !isReceiptNext && !isComprobante && !isReceiptCopiesConfig && !isFrontendErrors) {
+        if (!isMembers && !isMembersSearch && !isMembersFamily && !isMembersDebt && !isPersons && !isServiceProviders && !isMovements && !isMovement && !isMember && !isPerson && !isPersonMembers && !isInitialBalances && !isPayment && !isCementerios && !isDues && !isDuesConfig && !isDuesConfigHistory && !isServices && !isServiceRecords && !isSpecialServices && !isSpecialServiceAddons && !isSpecialServiceStatuses && !isSpecialServiceMovementTypes && !isSpecialServiceWorkflow && !isSpecialServiceRecordMovements && !isSpecialServiceRecords && !isCementerioMovimientos && !isUsers && !isVitalicios && !isDebts && !isDebtsBalance && !isExternalServices && !isExternalServicePayments && !isReceiptNext && !isComprobante && !isReceiptCopiesConfig && !isFrontendErrors) {
           next();
           return;
         }
@@ -1090,6 +1091,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 color,
                 includes_movement: body.includes_movement !== false,
                 movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+                is_default: typeof body.is_default === "boolean" ? body.is_default : undefined,
                 movement_type_key:
                   typeof body.movement_type_key === "string" && body.movement_type_key
                     ? body.movement_type_key
@@ -1118,6 +1120,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 color,
                 includes_movement: body.includes_movement !== false,
                 movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+                is_default: typeof body.is_default === "boolean" ? body.is_default : undefined,
                 movement_type_key:
                   typeof body.movement_type_key === "string" && body.movement_type_key
                     ? body.movement_type_key
@@ -1206,6 +1209,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 label: body.label.trim(),
                 includes_movement: body.includes_movement !== false,
                 movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+                is_default: typeof body.is_default === "boolean" ? body.is_default : undefined,
               });
               res.statusCode = 201;
               res.end(JSON.stringify(result));
@@ -1223,6 +1227,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 label: body.label.trim(),
                 includes_movement: body.includes_movement !== false,
                 movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
+                is_default: typeof body.is_default === "boolean" ? body.is_default : undefined,
               });
               if (!result) {
                 res.statusCode = 404;
@@ -1271,6 +1276,73 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
             return;
           }
 
+          if (isSpecialServiceWorkflow) {
+            const {
+              getBaseSpecialServiceWorkflow,
+              getSpecialServiceWorkflow,
+              parseSpecialServiceWorkflowInput,
+              saveSpecialServiceWorkflow,
+            } = await import("./src/database/specialServiceWorkflowRepository");
+
+            if (req.method === "GET") {
+              const serviceId = url.searchParams.get("serviceId");
+              const workflow = serviceId
+                ? await getSpecialServiceWorkflow(serviceId)
+                : await getBaseSpecialServiceWorkflow();
+              if (!workflow) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ error: "Servicio especial no encontrado" }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(JSON.stringify(workflow));
+              return;
+            }
+
+            if (req.method === "PUT") {
+              const body = JSON.parse(await collectBody(req));
+              if (!body?.special_service_id) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Falta el servicio especial" }));
+                return;
+              }
+              try {
+                const result = await saveSpecialServiceWorkflow(
+                  body.special_service_id,
+                  parseSpecialServiceWorkflowInput(body)
+                );
+                if (!result) {
+                  res.statusCode = 404;
+                  res.end(JSON.stringify({ error: "Servicio especial no encontrado" }));
+                  return;
+                }
+                res.statusCode = 200;
+                res.end(JSON.stringify(result));
+              } catch (error) {
+                res.statusCode = 400;
+                res.end(
+                  JSON.stringify({
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "No se pudo guardar la configuración del servicio",
+                  })
+                );
+              }
+              return;
+            }
+
+            if (req.method === "OPTIONS") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+
+            res.statusCode = 405;
+            res.end(JSON.stringify({ error: "Método no permitido" }));
+            return;
+          }
+
           if (isSpecialServiceRecordMovements) {
             const {
               getSpecialServiceRecordMovements,
@@ -1304,6 +1376,26 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 return;
               }
               try {
+                const { checkSpecialServiceRecordMovementType } = await import("./src/database/specialServiceWorkflowRepository");
+
+                const movementError = await checkSpecialServiceRecordMovementType(
+
+                  body.record_id,
+
+                  body.movement_type_key ?? null
+
+                );
+
+                if (movementError) {
+
+                  res.statusCode = 400;
+
+                  res.end(JSON.stringify({ error: movementError }));
+
+                  return;
+
+                }
+
                 const result = await insertSpecialServiceRecordMovement({
                   record_id: body.record_id,
                   movement_type_key: body.movement_type_key ?? null,
@@ -1442,6 +1534,26 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 res.end(JSON.stringify({ error: "Estado de servicio especial inválido" }));
                 return;
               }
+              const { checkSpecialServiceRecordStatus } = await import("./src/database/specialServiceWorkflowRepository");
+
+              const statusError = await checkSpecialServiceRecordStatus({
+
+                serviceId: body.special_service_id,
+
+                status: body.status,
+
+              });
+
+              if (statusError) {
+
+                res.statusCode = 400;
+
+                res.end(JSON.stringify({ error: statusError }));
+
+                return;
+
+              }
+
               const result = await insertSpecialServiceRecord({
                 special_service_id: body.special_service_id,
                 member_id: body.member_id ?? null,
@@ -1469,6 +1581,28 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 res.end(JSON.stringify({ error: "Estado de servicio especial inválido" }));
                 return;
               }
+              const { checkSpecialServiceRecordStatus } = await import("./src/database/specialServiceWorkflowRepository");
+
+              const statusError = await checkSpecialServiceRecordStatus({
+
+                recordId: body.id,
+
+                serviceId: body.special_service_id,
+
+                status: body.status,
+
+              });
+
+              if (statusError) {
+
+                res.statusCode = 400;
+
+                res.end(JSON.stringify({ error: statusError }));
+
+                return;
+
+              }
+
               const result = await updateSpecialServiceRecord(body.id, {
                 special_service_id: body.special_service_id,
                 member_id: body.member_id,

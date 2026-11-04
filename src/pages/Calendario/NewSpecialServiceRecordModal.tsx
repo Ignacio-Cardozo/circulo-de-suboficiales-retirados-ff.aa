@@ -22,6 +22,7 @@ import {
     type SpecialServiceRecordItem,
 } from "../../services/specialServiceRecordsApi";
 import { useSpecialServiceStatusesStore } from "../../store/specialServiceStatusesStore";
+import { useSpecialServiceWorkflow } from "../../store/specialServiceWorkflowStore";
 import type { Member, Person } from "../../models/members";
 import { formatNumberInput, parseMoney, toCurrency, todayLocal } from "../../utils/format";
 
@@ -166,9 +167,16 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
             : formatNumberInput(getPrice(selectedService, titularType) + addonsTotal)
         : "";
 
-    const effectiveStatus = statuses.some((item) => item.key === status)
+    // Estados habilitados para el servicio elegido (su lista propia o la lista base).
+    const { workflow } = useSpecialServiceWorkflow(serviceId || null);
+    const availableStatuses = useMemo(
+        () => workflow?.statuses ?? statuses.filter((item) => item.is_default !== false),
+        [workflow, statuses]
+    );
+
+    const effectiveStatus = availableStatuses.some((item) => item.key === status)
         ? status
-        : statuses[0]?.key ?? status;
+        : availableStatuses[0]?.key ?? status;
 
     const handleServiceChange = (value: string) => {
         setServiceId(value);
@@ -437,12 +445,15 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                                     value={effectiveStatus}
                                     onChange={(e) => setStatus(e.target.value)}
                                 >
-                                    {statuses.map((item) => (
+                                    {availableStatuses.map((item) => (
                                         <option key={item.key} value={item.key}>
                                             {item.label}
                                         </option>
                                     ))}
                                 </select>
+                                {selectedService && workflow?.custom_statuses && (
+                                    <span className="ss-hint">Estados propios de este servicio.</span>
+                                )}
                             </div>
                         </div>
 

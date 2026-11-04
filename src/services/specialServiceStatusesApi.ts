@@ -8,6 +8,8 @@ export type SpecialServiceStatusItem = {
     movement_type: MovementDirection;
     movement_type_key: string | null;
     sort_order: number;
+    /** Forma parte de la lista base para servicios sin configuración propia. */
+    is_default: boolean;
     created_at: string;
     updated_at: string;
 };
@@ -18,6 +20,7 @@ export type SpecialServiceStatusInput = {
     includes_movement: boolean;
     movement_type: MovementDirection;
     movement_type_key?: string | null;
+    is_default?: boolean;
 };
 
 async function parseError(response: Response, fallback: string): Promise<Error> {

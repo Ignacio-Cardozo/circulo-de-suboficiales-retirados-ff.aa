@@ -1,10 +1,26 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+    AlertCircle,
+    ArrowLeftRight,
+    ChevronRight,
+    Coins,
+    FileText,
+    Loader,
+    Sparkles,
+    Tags,
+    TrendingDown,
+    TrendingUp,
+    Wallet,
+    type LucideIcon,
+} from "lucide-react";
 import {
     fetchInitialBalances,
 } from "../../services/initialBalancesApi";
 import {
     fetchDuesConfig,
-} from "../../services/duesConfigApi";import {
+} from "../../services/duesConfigApi";
+import {
     fetchServices,
     type ServiceItem,
 } from "../../services/servicesApi";
@@ -21,7 +37,6 @@ import {
     type ReceiptConcept,
 } from "../../services/receiptCopiesConfigApi";
 import { formatNumberInput } from "../../utils/format";
-import CollapsibleCard from "../../components/ui/CollapsibleCard";
 import BalancesConfig from "./BalancesConfig";
 import DuesConfig from "./DuesConfig";
 import ServicesConfig from "./ServicesConfig";
@@ -31,6 +46,35 @@ import SpecialServiceStatusesConfig from "./SpecialServiceStatusesConfig";
 import SpecialServiceMovementTypesConfig from "./SpecialServiceMovementTypesConfig";
 import ReceiptCopiesConfig from "./ReceiptCopiesConfig";
 import "./Config.css";
+
+type SectionId =
+    | "saldos"
+    | "cuotas"
+    | "ingresos"
+    | "egresos"
+    | "comprobantes"
+    | "especiales"
+    | "estados"
+    | "movimientos";
+
+interface SectionDef {
+    id: SectionId;
+    group: string;
+    title: string;
+    description: string;
+    icon: LucideIcon;
+}
+
+const SECTIONS: SectionDef[] = [
+    { id: "saldos", group: "Finanzas", title: "Valores Iniciales", description: "Saldos iniciales de cajas y próximos números de comprobante.", icon: Wallet },
+    { id: "cuotas", group: "Finanzas", title: "Cuotas", description: "Tarifas por tipo de socio, recargos por servicios y cuotas de cementerio.", icon: Coins },
+    { id: "ingresos", group: "Ingresos y Egresos", title: "Ingresos", description: "Servicios que generan ingresos.", icon: TrendingUp },
+    { id: "egresos", group: "Ingresos y Egresos", title: "Egresos", description: "Servicios que generan egresos.", icon: TrendingDown },
+    { id: "comprobantes", group: "Ingresos y Egresos", title: "Conceptos y Comprobantes", description: "Conceptos de ingresos/egresos, cantidad de copias y destino por concepto.", icon: FileText },
+    { id: "especiales", group: "Servicios", title: "Nuestros Servicios", description: "Catálogo de servicios, precios y señas.", icon: Sparkles },
+    { id: "estados", group: "Servicios", title: "Estados", description: "Nombres y colores de los estados de servicios.", icon: Tags },
+    { id: "movimientos", group: "Servicios", title: "Movimientos", description: "Tipos de movimiento, dirección e impacto en caja.", icon: ArrowLeftRight },
+];
 
 const Variables: React.FC = () => {
     const [loading, setLoading] = useState(true);
@@ -102,26 +146,46 @@ const Variables: React.FC = () => {
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) return <div className="dashboard-loading">Cargando...</div>;
-    if (error) return <div className="dashboard-loading" style={{ color: "var(--danger)" }}>{error}</div>;
+    const [searchParams, setSearchParams] = useSearchParams();
+    const requested = searchParams.get("seccion") as SectionId | null;
+    const activeId: SectionId = SECTIONS.some((s) => s.id === requested) ? (requested as SectionId) : SECTIONS[0].id;
+    const active = SECTIONS.find((s) => s.id === activeId)!;
 
-    return (
-        <div className="config-container custom-scroll">
-            <div className="config-grid">
-                <CollapsibleCard
-                    title="Valores Iniciales"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Saldos iniciales de cajas</span>}
-                >
-                    <BalancesConfig initialCajaChica={cajaChica} initialBanco={banco} initialComprobanteIngreso={comprobanteIngreso} initialComprobanteEgreso={comprobanteEgreso} />
-                </CollapsibleCard>
-                <CollapsibleCard
-                    title="Cuotas"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Tarifas, montos y servicios</span>}
-                >
+    const selectSection = (id: SectionId) => {
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("seccion", id);
+            return next;
+        }, { replace: true });
+    };
+
+    if (loading) {
+        return (
+            <div className="config-container">
+                <div className="vars-state">
+                    <Loader size={20} className="spin" />
+                    <span>Cargando variables del sistema…</span>
+                </div>
+            </div>
+        );
+    }
+    if (error) {
+        return (
+            <div className="config-container">
+                <div className="vars-state vars-state-error" role="alert">
+                    <AlertCircle size={20} />
+                    <span>{error}</span>
+                </div>
+            </div>
+        );
+    }
+
+    const renderSection = (id: SectionId) => {
+        switch (id) {
+            case "saldos":
+                return <BalancesConfig initialCajaChica={cajaChica} initialBanco={banco} initialComprobanteIngreso={comprobanteIngreso} initialComprobanteEgreso={comprobanteEgreso} />;
+            case "cuotas":
+                return (
                     <DuesConfig
                         initialMemberFee={memberFee}
                         initialConsiderationYears={considerationYears}
@@ -139,55 +203,66 @@ const Variables: React.FC = () => {
                         initialFeePart={feePart}
                         initialFeeVit={feeVit}
                     />
-                </CollapsibleCard>
-                <CollapsibleCard
-                    title="Ingresos"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Configurar servicios que generan ingresos</span>}
-                >
-                    <ServicesConfig initialServices={services} />
-                </CollapsibleCard>
-                <CollapsibleCard
-                    title="Egresos"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Configurar servicios que generan egresos</span>}
-                >
-                    <ExternalServicesConfig initialServices={externalServices} />
-                </CollapsibleCard>
-                <CollapsibleCard
-                    title="Servicios Especiales"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Catálogo de servicios especiales, precios y señas</span>}
-                >
-                    <SpecialServicesConfig initialServices={specialServices} />
-                </CollapsibleCard>
-                <CollapsibleCard
-                    title="Estados de Servicios Especiales"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Nombres y colores de los estados</span>}
-                >
-                    <SpecialServiceStatusesConfig />
-                </CollapsibleCard>
-                <CollapsibleCard
-                    title="Movimientos de Servicios Especiales"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Tipos, dirección e impacto en caja</span>}
-                >
-                    <SpecialServiceMovementTypesConfig />
-                </CollapsibleCard>
-                <CollapsibleCard
-                    title="Valores Ingresos/Egresos, Comprobantes"
-                    className="config-card"
-                    defaultOpen={false}
-                    headerExtra={<span className="config-card-hint">Conceptos, copias y destino por concepto</span>}
-                >
-                    <ReceiptCopiesConfig initialConcepts={receiptConcepts} />
-                </CollapsibleCard>
+                );
+            case "ingresos":
+                return <ServicesConfig initialServices={services} />;
+            case "egresos":
+                return <ExternalServicesConfig initialServices={externalServices} />;
+            case "comprobantes":
+                return <ReceiptCopiesConfig initialConcepts={receiptConcepts} />;
+            case "especiales":
+                return <SpecialServicesConfig initialServices={specialServices} />;
+            case "estados":
+                return <SpecialServiceStatusesConfig />;
+            case "movimientos":
+                return <SpecialServiceMovementTypesConfig />;
+        }
+    };
+
+    const groups = Array.from(new Set(SECTIONS.map((s) => s.group)));
+    const ActiveIcon = active.icon;
+
+    return (
+        <div className="config-container custom-scroll">
+            <div className="vars-layout">
+                <nav className="vars-nav" aria-label="Secciones de variables">
+                    {groups.map((group) => (
+                        <div key={group} className="vars-nav-group">
+                            <div className="vars-nav-group-title">{group}</div>
+                            {SECTIONS.filter((s) => s.group === group).map((s) => {
+                                const Icon = s.icon;
+                                const isActive = s.id === activeId;
+                                return (
+                                    <button
+                                        key={s.id}
+                                        type="button"
+                                        className={`vars-nav-item${isActive ? " active" : ""}`}
+                                        aria-current={isActive ? "page" : undefined}
+                                        onClick={() => selectSection(s.id)}
+                                    >
+                                        <span className="vars-nav-icon"><Icon size={16} /></span>
+                                        <span className="vars-nav-label">{s.title}</span>
+                                        <ChevronRight size={14} className="vars-nav-chevron" />
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ))}
+                </nav>
+
+                <section className="vars-panel" aria-labelledby="vars-panel-title">
+                    <header className="vars-panel-header">
+                        <span className="vars-panel-icon"><ActiveIcon size={20} /></span>
+                        <div className="vars-panel-heading">
+                            <span className="vars-panel-eyebrow">{active.group}</span>
+                            <h2 id="vars-panel-title">{active.title}</h2>
+                            <p>{active.description}</p>
+                        </div>
+                    </header>
+                    <div className="vars-panel-body" key={activeId}>
+                        {renderSection(activeId)}
+                    </div>
+                </section>
             </div>
         </div>
     );

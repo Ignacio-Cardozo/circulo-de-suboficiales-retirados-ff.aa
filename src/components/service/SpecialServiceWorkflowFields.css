@@ -1,0 +1,225 @@
+.ssw {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ssw-loading {
+    padding: 12px;
+    border: 1px dashed var(--gris-medio, #e2e8f0);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.ssw-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--gris-medio, #e2e8f0);
+    border-radius: 10px;
+    background: var(--gris-claro, #f8fafc);
+}
+
+.ssw-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ssw-section-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--azul-armada);
+}
+
+.ssw-section-icon {
+    display: inline-flex;
+    color: var(--azul-institucional);
+}
+
+.ssw-toggle {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--gris-medio, #e2e8f0);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.ssw-toggle button {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.ssw-toggle button.is-active {
+    background: var(--azul-institucional);
+    color: #fff;
+}
+
+.ssw-toggle button:focus-visible,
+.ssw-item-actions button:focus-visible,
+.ssw-add:focus-visible {
+    outline: 2px solid var(--azul-institucional);
+    outline-offset: 1px;
+}
+
+.ssw-toggle button:disabled,
+.ssw-item-actions button:disabled,
+.ssw-add:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.ssw-base,
+.ssw-custom {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ssw-flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ssw-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ssw-hint {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--muted);
+}
+
+.ssw-warning {
+    padding: 8px 10px;
+    border: 1px solid rgba(180, 83, 9, 0.3);
+    border-radius: 8px;
+    background: #fffbeb;
+    color: #b45309;
+    font-size: 12px;
+}
+
+.ssw-selected {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--gris-medio, #e2e8f0);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.ssw-selected-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--gris-medio, #e2e8f0);
+}
+
+.ssw-selected-item:last-child {
+    border-bottom: none;
+}
+
+.ssw-index {
+    width: 18px;
+    flex-shrink: 0;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ssw-item-hint {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.ssw-item-actions {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.ssw-item-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.ssw-item-actions button:hover:not(:disabled) {
+    background: var(--gris-claro, #f8fafc);
+    color: var(--azul-armada);
+}
+
+.ssw-item-actions button.is-remove:hover:not(:disabled) {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.ssw-available {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ssw-available-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.ssw-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.ssw-add:hover:not(:disabled) {
+    border-color: var(--azul-institucional);
+    color: var(--azul-institucional);
+}

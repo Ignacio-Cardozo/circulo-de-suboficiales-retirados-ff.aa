@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
     Calendar,
     Check,
+    CircleHelp,
     DollarSign,
     ExternalLink,
     FileText,
@@ -41,6 +42,7 @@ import { fetchMembers } from "../../services/membersApi";
 import { fetchAllPersons } from "../../services/personsApi";
 import { useSpecialServiceStatusesStore } from "../../store/specialServiceStatusesStore";
 import { useSpecialServiceMovementTypesStore } from "../../store/specialServiceMovementTypesStore";
+import { useSpecialServiceWorkflow } from "../../store/specialServiceWorkflowStore";
 import {
     formatNumberInput,
     formatRecordDate,
@@ -53,6 +55,15 @@ import SpecialServiceStatusBadge from "./SpecialServiceStatusBadge";
 import SpecialServiceStatusSteps from "./SpecialServiceStatusSteps";
 
 type TitularType = "member" | "person" | "none";
+
+/**
+ * Un movimiento está vigente si no fue anulado. Los que impactan en caja además
+ * necesitan su movimiento de caja (si se borró, ya no cuenta como registrado).
+ */
+function isActiveRecordMovement(movement: SpecialServiceRecordMovementItem): boolean {
+    if (movement.movement_anulado) return false;
+    return !movement.includes_movement || Boolean(movement.movement_id);
+}
 
 interface SpecialServiceRecordDetailModalProps {
     record: SpecialServiceRecordItem;
@@ -158,20 +169,38 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
         };
     }, [record.id]);
 
-    const effectiveStatus = statuses.some((item) => item.key === status)
+    // Configuración del servicio guardado en el registro (movimientos) y del servicio
+    // que se está editando (estados). Ambas caen en la lista base si el servicio no tiene una propia.
+    const { workflow: recordWorkflow } = useSpecialServiceWorkflow(record.special_service_id);
+    const { workflow: editWorkflow } = useSpecialServiceWorkflow(
+        editing ? serviceId || null : record.special_service_id
+    );
+
+    // Estados seleccionables: los del servicio, más el estado actual del registro si ya no
+    // forma parte de esa lista (p. ej. "Cancelado" o un estado quitado después).
+    const stepStatuses = useMemo(() => {
+        const list = editWorkflow?.statuses ?? statuses;
+        if (list.some((item) => item.key === record.status)) return list;
+        const current = statuses.find((item) => item.key === record.status);
+        return current ? [...list, { ...current, sort_order: list.length }] : list;
+    }, [editWorkflow, statuses, record.status]);
+
+    const availableMovementTypes = recordWorkflow?.movement_types ?? movementTypes;
+
+    const effectiveStatus = stepStatuses.some((item) => item.key === status)
         ? status
-        : statuses[0]?.key ?? status;
+        : stepStatuses[0]?.key ?? status;
 
     const pendingMovementKeys = useMemo(() => {
         const pending = new Set<string>();
-        const selectedStatus = statuses.find((item) => item.key === effectiveStatus) ?? null;
+        const selectedStatus = stepStatuses.find((item) => item.key === effectiveStatus) ?? null;
         if (!selectedStatus?.includes_movement) return pending;
         const registered = new Set(
             movements
                 .map((movement) => movement.movement_type_key)
                 .filter((key): key is string => Boolean(key))
         );
-        for (const item of statuses) {
+        for (const item of stepStatuses) {
             if (
                 item.includes_movement &&
                 item.movement_type_key &&
@@ -182,25 +211,41 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
             }
         }
         return pending;
-    }, [statuses, effectiveStatus, movements]);
+    }, [stepStatuses, effectiveStatus, movements]);
 
+    // Tipos con un movimiento vigente (no anulado): no se pueden volver a registrar.
     const completedMovementKeys = useMemo(() => {
         return new Set(
             movements
-                .filter((movement) => !movement.movement_anulado)
+                .filter(isActiveRecordMovement)
                 .map((movement) => movement.movement_type_key)
                 .filter((key): key is string => Boolean(key))
         );
     }, [movements]);
 
+    // Tipos que se registraron pero cuyos movimientos están todos anulados: se pueden registrar de nuevo.
+    const annulledMovementKeys = useMemo(() => {
+        const keys = new Set<string>();
+        for (const movement of movements) {
+            if (
+                movement.movement_type_key &&
+                movement.movement_anulado &&
+                !completedMovementKeys.has(movement.movement_type_key)
+            ) {
+                keys.add(movement.movement_type_key);
+            }
+        }
+        return keys;
+    }, [movements, completedMovementKeys]);
+
     const visibleMovementTypes = useMemo(() => {
-        if (movementFilter === "all") return movementTypes;
-        return movementTypes.filter((type) =>
+        if (movementFilter === "all") return availableMovementTypes;
+        return availableMovementTypes.filter((type) =>
             movementFilter === "listos"
                 ? completedMovementKeys.has(type.key)
                 : !completedMovementKeys.has(type.key)
         );
-    }, [movementTypes, movementFilter, completedMovementKeys]);
+    }, [availableMovementTypes, movementFilter, completedMovementKeys]);
 
     const selectedService = useMemo(
         () => services.find((service) => service.id === serviceId) ?? null,
@@ -367,6 +412,12 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
     };
 
     const openMovementForType = (type: SpecialServiceMovementTypeItem) => {
+        if (completedMovementKeys.has(type.key)) {
+            setMovementError(
+                `Ya hay un "${type.label}" registrado. Anulalo para poder registrarlo de nuevo.`
+            );
+            return;
+        }
         const suggested =
             type.movement_type === "egreso" || type.key === "sena"
                 ? record.deposit_cost ?? record.amount
@@ -572,10 +623,12 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
             onClose={onClose}
             title="Detalle del servicio"
             maxWidth={980}
+            contentClassName="ss-detail-modal"
         >
             <div className="ss-detail-layout">
                 <div className="ss-detail-main">
                     {editing ? (
+                        <>
                         <form className="ss-form" onSubmit={handleSubmitEdits}>
                             <div className="ss-field">
                                 <label>Servicio *</label>
@@ -693,7 +746,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                             <div className="ss-field">
                                 <label>Estado</label>
                                 <SpecialServiceStatusSteps
-                                    statuses={statuses}
+                                    statuses={stepStatuses}
                                     value={effectiveStatus}
                                     onSelect={setStatus}
                                     disabled={saving}
@@ -702,6 +755,33 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
 
                             {error && <div className="ss-error">{error}</div>}
                         </form>
+                        <div className="ss-detail-actions">
+                            <button
+                                type="button"
+                                className="ss-btn ss-btn-secondary"
+                                onClick={cancelEditing}
+                                disabled={saving}
+                            >
+                                <X size={15} /> Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                className="ss-btn ss-btn-primary"
+                                onClick={handleApplyChanges}
+                                disabled={!isDirty || saving || movementSaving || optionsLoading}
+                            >
+                                {saving ? (
+                                    <>
+                                        <Loader size={15} className="spin" /> Guardando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save size={15} /> Actualizar
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                        </>
                     ) : (
                         <>
                             <div className="ss-detail-highlight">
@@ -797,7 +877,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                             <div className="ss-status-editor">
                                 <label>Estado del servicio</label>
                                 <SpecialServiceStatusSteps
-                                    statuses={statuses}
+                                    statuses={stepStatuses}
                                     value={effectiveStatus}
                                     onSelect={setStatus}
                                     disabled={saving}
@@ -830,6 +910,22 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                     ) : (
                                         <>
                                             <Trash2 size={15} /> Eliminar
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="ss-btn ss-btn-primary"
+                                    onClick={handleApplyChanges}
+                                    disabled={!isDirty || saving || movementSaving || optionsLoading}
+                                >
+                                    {saving ? (
+                                        <>
+                                            <Loader size={15} className="spin" /> Guardando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save size={15} /> Actualizar
                                         </>
                                     )}
                                 </button>
@@ -873,29 +969,40 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
 
                     <div className="ss-movement-actions">
                         {visibleMovementTypes.map((type) => {
-                            const isPending = pendingMovementKeys.has(type.key);
                             const isDone = completedMovementKeys.has(type.key);
+                            const isAnnulled = !isDone && annulledMovementKeys.has(type.key);
+                            const isPending =
+                                !isDone && !isAnnulled && pendingMovementKeys.has(type.key);
                             return (
                                 <button
                                     key={type.key}
                                     type="button"
                                     className={`ss-movement-action ${type.movement_type}${
                                         isPending ? " is-pending" : ""
-                                    }${isDone ? " is-done" : ""}`}
+                                    }${isDone ? " is-done" : ""}${isAnnulled ? " is-annulled" : ""}`}
                                     onClick={() => openMovementForType(type)}
-                                    disabled={editing || movementSaving}
+                                    disabled={editing || movementSaving || isDone}
                                     title={
                                         isDone
-                                            ? "Movimiento realizado"
-                                            : isPending
-                                              ? "Pendiente"
-                                              : undefined
+                                            ? "Ya registrado. Anulalo para poder registrarlo de nuevo."
+                                            : isAnnulled
+                                              ? "El movimiento registrado fue anulado. Podés registrarlo de nuevo."
+                                              : isPending
+                                                ? "Pendiente"
+                                                : undefined
                                     }
                                 >
-                                    <Plus size={14} /> {type.label}
+                                    {isDone ? <Check size={14} /> : <Plus size={14} />} {type.label}
                                     {isDone ? (
                                         <span className="ss-movement-done" title="Movimiento realizado">
                                             <Check size={14} />
+                                        </span>
+                                    ) : isAnnulled ? (
+                                        <span
+                                            className="ss-movement-annulled"
+                                            title="Movimiento anulado"
+                                        >
+                                            <CircleHelp size={14} />
                                         </span>
                                     ) : isPending ? (
                                         <span className="ss-movement-pending" title="Pendiente">
@@ -905,12 +1012,12 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                 </button>
                             );
                         })}
-                        {movementTypes.length === 0 && (
+                        {availableMovementTypes.length === 0 && (
                             <p className="ss-movement-empty">
                                 Configurá los movimientos en Configuración → Variables.
                             </p>
                         )}
-                        {movementTypes.length > 0 && visibleMovementTypes.length === 0 && (
+                        {availableMovementTypes.length > 0 && visibleMovementTypes.length === 0 && (
                             <p className="ss-movement-empty">
                                 {movementFilter === "listos"
                                     ? "No hay movimientos realizados."
@@ -1018,7 +1125,9 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                             movements.map((movement) => (
                                 <div
                                     key={movement.id}
-                                    className={`ss-movement-item ${movement.movement_type}`}
+                                    className={`ss-movement-item ${movement.movement_type}${
+                                        movement.movement_anulado ? " is-annulled" : ""
+                                    }`}
                                 >
                                     <div className="ss-movement-item-top">
                                         <span className="ss-movement-item-label">
@@ -1040,7 +1149,12 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                             <span className="ss-movement-tag">Sin caja</span>
                                         )}
                                         {movement.movement_anulado && (
-                                            <span className="ss-movement-tag danger">Anulado</span>
+                                            <span
+                                                className="ss-movement-tag annulled"
+                                                title="Este movimiento fue anulado. Podés registrarlo de nuevo."
+                                            >
+                                                <CircleHelp size={10} /> Anulado
+                                            </span>
                                         )}
                                     </div>
                                     {movement.movement_id && (
@@ -1073,34 +1187,6 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                 </aside>
             </div>
 
-            <div className="ss-detail-footer">
-                {editing && (
-                    <button
-                        type="button"
-                        className="ss-btn ss-btn-secondary"
-                        onClick={cancelEditing}
-                        disabled={saving}
-                    >
-                        <X size={16} /> Cancelar
-                    </button>
-                )}
-                <button
-                    type="button"
-                    className="ss-btn ss-btn-primary"
-                    onClick={handleApplyChanges}
-                    disabled={!isDirty || saving || movementSaving || optionsLoading}
-                >
-                    {saving ? (
-                        <>
-                            <Loader size={16} className="spin" /> Guardando...
-                        </>
-                    ) : (
-                        <>
-                            <Save size={16} /> Actualizar
-                        </>
-                    )}
-                </button>
-            </div>
         </Modal>
         {comprobanteData && (
             <Comprobante

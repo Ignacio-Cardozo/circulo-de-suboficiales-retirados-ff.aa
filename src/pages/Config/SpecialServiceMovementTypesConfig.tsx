@@ -8,6 +8,7 @@ import {
     type SpecialServiceMovementTypeItem,
 } from "../../services/specialServiceMovementTypesApi";
 import { useSpecialServiceMovementTypesStore } from "../../store/specialServiceMovementTypesStore";
+import { useSpecialServiceWorkflowStore } from "../../store/specialServiceWorkflowStore";
 
 function sortMovementTypes(
     movementTypes: SpecialServiceMovementTypeItem[]
@@ -27,6 +28,8 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
     const [label, setLabel] = useState("");
     const [includesMovement, setIncludesMovement] = useState(true);
     const [movementType, setMovementType] = useState<MovementDirection>("ingreso");
+    const [isDefault, setIsDefault] = useState(true);
+    const clearWorkflows = useSpecialServiceWorkflowStore((state) => state.clear);
     const [editKey, setEditKey] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -39,6 +42,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
         setLabel("");
         setIncludesMovement(true);
         setMovementType("ingreso");
+        setIsDefault(true);
         setEditKey(null);
     };
 
@@ -53,6 +57,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                     label: label.trim(),
                     includes_movement: includesMovement,
                     movement_type: movementType,
+                    is_default: isDefault,
                 });
                 setMovementTypes(
                     sortMovementTypes(
@@ -64,9 +69,11 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                     label: label.trim(),
                     includes_movement: includesMovement,
                     movement_type: movementType,
+                    is_default: isDefault,
                 });
                 setMovementTypes(sortMovementTypes([...movementTypes, created]));
             }
+            clearWorkflows();
             resetForm();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Error al guardar el movimiento");
@@ -79,6 +86,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
         setLabel(movement.label);
         setIncludesMovement(movement.includes_movement);
         setMovementType(movement.movement_type);
+        setIsDefault(movement.is_default !== false);
         setEditKey(movement.key);
         setError(null);
     };
@@ -89,6 +97,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
         try {
             await deleteSpecialServiceMovementType(movement.key);
             setMovementTypes(movementTypes.filter((item) => item.key !== movement.key));
+            clearWorkflows();
             if (editKey === movement.key) resetForm();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Error al eliminar el movimiento");
@@ -132,6 +141,17 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                         <span>Impacta en la caja</span>
                     </label>
                 </div>
+                <div className="config-field">
+                    <label>Lista base</label>
+                    <label className="special-movement-check">
+                        <input
+                            type="checkbox"
+                            checked={isDefault}
+                            onChange={(e) => setIsDefault(e.target.checked)}
+                        />
+                        <span>Incluir en la lista base de los servicios</span>
+                    </label>
+                </div>
                 {error && <div className="config-error">{error}</div>}
                 <div className="config-form-actions">
                     <button type="submit" className="config-save-btn" disabled={saving || !label.trim()}>
@@ -163,12 +183,13 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
             </form>
 
             <div className="special-statuses-wrapper">
-                <table className="special-statuses-table">
+                <table className="special-statuses-table special-movements-table">
                     <thead>
                         <tr>
                             <th>Movimiento</th>
                             <th>Tipo</th>
                             <th>Incluye movimiento</th>
+                            <th>Lista base</th>
                             <th className="actions">Acciones</th>
                         </tr>
                     </thead>
@@ -189,6 +210,18 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                                     </span>
                                 </td>
                                 <td>{movement.includes_movement ? "Sí" : "No"}</td>
+                                <td>
+                                    <span
+                                        className={`special-default-badge ${movement.is_default !== false ? "is-on" : "is-off"}`}
+                                        title={
+                                            movement.is_default !== false
+                                                ? "Lo usan los servicios que siguen la lista base"
+                                                : "Solo disponible para servicios con lista propia"
+                                        }
+                                    >
+                                        {movement.is_default !== false ? "Sí" : "No"}
+                                    </span>
+                                </td>
                                 <td className="actions">
                                     <button
                                         type="button"
@@ -223,7 +256,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                         ))}
                         {movementTypes.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="svc-list-empty">
+                                <td colSpan={5} className="svc-list-empty">
                                     No hay movimientos configurados. Ejecutá npm run db:migrate para
                                     crear los movimientos por defecto.
                                 </td>

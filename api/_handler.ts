@@ -940,6 +940,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           color: nextColor,
           includes_movement: req.body.includes_movement !== false,
           movement_type: req.body.movement_type === "egreso" ? "egreso" : "ingreso",
+          is_default: typeof req.body.is_default === "boolean" ? req.body.is_default : undefined,
           movement_type_key:
             typeof req.body.movement_type_key === "string" && req.body.movement_type_key
               ? req.body.movement_type_key
@@ -965,6 +966,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           color: nextColor,
           includes_movement: req.body.includes_movement !== false,
           movement_type: req.body.movement_type === "egreso" ? "egreso" : "ingreso",
+          is_default: typeof req.body.is_default === "boolean" ? req.body.is_default : undefined,
           movement_type_key:
             typeof req.body.movement_type_key === "string" && req.body.movement_type_key
               ? req.body.movement_type_key
@@ -1035,6 +1037,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           label: label.trim(),
           includes_movement: req.body.includes_movement !== false,
           movement_type: req.body.movement_type === "egreso" ? "egreso" : "ingreso",
+          is_default: typeof req.body.is_default === "boolean" ? req.body.is_default : undefined,
         });
         res.status(201).json(result);
         return;
@@ -1050,6 +1053,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           label: label.trim(),
           includes_movement: req.body.includes_movement !== false,
           movement_type: req.body.movement_type === "egreso" ? "egreso" : "ingreso",
+          is_default: typeof req.body.is_default === "boolean" ? req.body.is_default : undefined,
         });
         if (!result) {
           res.status(404).json({ error: "Movimiento no encontrado" });
@@ -1074,6 +1078,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           return;
         }
         res.status(200).json({ success: true });
+        return;
+      }
+
+      res.status(405).json({ error: "Método no permitido" });
+      return;
+    }
+
+    if (pathname === "/api/special-service-workflow") {
+      const {
+        getBaseSpecialServiceWorkflow,
+        getSpecialServiceWorkflow,
+        parseSpecialServiceWorkflowInput,
+        saveSpecialServiceWorkflow,
+      } = await import("../src/database/specialServiceWorkflowRepository.js");
+
+      if (method === "GET") {
+        const serviceId = req.query.serviceId as string | undefined;
+        const workflow = serviceId
+          ? await getSpecialServiceWorkflow(serviceId)
+          : await getBaseSpecialServiceWorkflow();
+        if (!workflow) {
+          res.status(404).json({ error: "Servicio especial no encontrado" });
+          return;
+        }
+        res.status(200).json(workflow);
+        return;
+      }
+
+      if (method === "PUT") {
+        const { special_service_id } = req.body ?? {};
+        if (!special_service_id) {
+          res.status(400).json({ error: "Falta el servicio especial" });
+          return;
+        }
+        try {
+          const result = await saveSpecialServiceWorkflow(
+            special_service_id,
+            parseSpecialServiceWorkflowInput(req.body)
+          );
+          if (!result) {
+            res.status(404).json({ error: "Servicio especial no encontrado" });
+            return;
+          }
+          res.status(200).json(result);
+        } catch (error) {
+          res.status(400).json({
+            error:
+              error instanceof Error
+                ? error.message
+                : "No se pudo guardar la configuración del servicio",
+          });
+        }
         return;
       }
 
@@ -1110,6 +1166,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           return;
         }
         try {
+          const { checkSpecialServiceRecordMovementType } = await import("../src/database/specialServiceWorkflowRepository.js");
+
+          const movementError = await checkSpecialServiceRecordMovementType(
+
+            record_id,
+
+            req.body.movement_type_key ?? null
+
+          );
+
+          if (movementError) {
+
+            res.status(400).json({ error: movementError });
+
+            return;
+
+          }
+
           const result = await insertSpecialServiceRecordMovement({
             record_id,
             movement_type_key: req.body.movement_type_key ?? null,
@@ -1231,6 +1305,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           res.status(400).json({ error: "Estado de servicio especial inválido" });
           return;
         }
+        const { checkSpecialServiceRecordStatus } = await import("../src/database/specialServiceWorkflowRepository.js");
+
+        const statusError = await checkSpecialServiceRecordStatus({
+
+          serviceId: special_service_id,
+
+          status,
+
+        });
+
+        if (statusError) {
+
+          res.status(400).json({ error: statusError });
+
+          return;
+
+        }
+
         const result = await insertSpecialServiceRecord({
           special_service_id,
           member_id: member_id ?? null,
@@ -1264,6 +1356,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           res.status(400).json({ error: "Estado de servicio especial inválido" });
           return;
         }
+        const { checkSpecialServiceRecordStatus } = await import("../src/database/specialServiceWorkflowRepository.js");
+
+        const statusError = await checkSpecialServiceRecordStatus({
+
+          recordId: id,
+
+          serviceId: special_service_id,
+
+          status,
+
+        });
+
+        if (statusError) {
+
+          res.status(400).json({ error: statusError });
+
+          return;
+
+        }
+
         const result = await updateSpecialServiceRecord(id, {
           special_service_id,
           member_id,

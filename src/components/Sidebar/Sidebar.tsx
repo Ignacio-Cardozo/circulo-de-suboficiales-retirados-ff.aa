@@ -1,12 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  Home,
-  Landmark,
-  Users,
-  BarChart2,
-  Calendar,
-  Settings,
   ChevronDown,
   User,
   LogOut,
@@ -18,6 +12,7 @@ import {
   Cross,
 } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
+import { getMainNavLinks } from "./navLinks";
 import logo from "../../assets/logo_ffaa-bg.png";
 import "./Sidebar.css";
 
@@ -42,7 +37,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const role = user?.role ?? "secretario";
-  const isSecretario = role === "secretario";
 
   const toggleSubmenu = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -69,21 +63,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     onHoverChange?.(false);
   };
 
-  const links = [
-    { to: "/", label: "Inicio", icon: Home },
-    ...(!isSecretario ? [
-      { to: "/tesoreria/dashboard", label: "Tesorería", icon: Landmark, hasSubmenu: true },
-    ] : []),
-    { to: "/socios", label: "Socios", icon: Users },
-    { to: "/terceros", label: "Terceros", icon: User },
-    ...(!isSecretario ? [
-      { to: "/reportes", label: "Reportes", icon: BarChart2 },
-    ] : []),
-    { to: "/calendario", label: "Calendario", icon: Calendar },
-    ...(!isSecretario ? [
-      { to: "/configuracion", label: "Configuración", icon: Settings },
-    ] : []),
-  ];
+  const links = getMainNavLinks(role);
 
   const submenuLinks = [
     { to: "/tesoreria/movimientos", label: "Movimientos", icon: ArrowRightLeft },

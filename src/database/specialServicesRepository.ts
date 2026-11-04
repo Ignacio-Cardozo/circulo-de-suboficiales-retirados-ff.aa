@@ -8,6 +8,10 @@ export type SpecialServiceRow = {
     member_price: number;
     person_price: number;
     deposit_cost: number;
+    /** true: usa su propia lista de estados (special_service_status_assignments). false: usa la lista base. */
+    custom_statuses: boolean;
+    /** true: usa su propia lista de movimientos (special_service_movement_type_assignments). false: usa la lista base. */
+    custom_movement_types: boolean;
     created_at: string;
     updated_at: string;
 };
@@ -34,6 +38,8 @@ export async function ensureSpecialServicesTable(): Promise<void> {
             updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
         )
     `;
+    await sql`ALTER TABLE special_services ADD COLUMN IF NOT EXISTS custom_statuses BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE special_services ADD COLUMN IF NOT EXISTS custom_movement_types BOOLEAN NOT NULL DEFAULT FALSE`;
 }
 
 export async function getAllSpecialServices(): Promise<SpecialServiceRow[]> {
@@ -47,6 +53,8 @@ export async function getAllSpecialServices(): Promise<SpecialServiceRow[]> {
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            custom_statuses,
+            custom_movement_types,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_services
@@ -66,6 +74,8 @@ export async function getSpecialServiceById(id: string): Promise<SpecialServiceR
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            custom_statuses,
+            custom_movement_types,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_services
@@ -96,6 +106,8 @@ export async function insertSpecialService(data: SpecialServiceInput): Promise<S
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            custom_statuses,
+            custom_movement_types,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceRow[];
@@ -121,6 +133,8 @@ export async function updateSpecialService(id: string, data: SpecialServiceInput
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            custom_statuses,
+            custom_movement_types,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceRow[];

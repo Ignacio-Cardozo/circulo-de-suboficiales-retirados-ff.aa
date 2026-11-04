@@ -11,6 +11,7 @@ import { migrateSpecialServiceMovementTypesSchema } from "../src/database/specia
 import { ensureSpecialServiceAddonsTable } from "../src/database/specialServiceAddonsRepository";
 import { migrateDebtsSchema } from "../src/database/debtsRepository";
 import { migratePersonsSchema } from "../src/database/personsRepository";
+import { ensureSpecialServiceWorkflowSchema } from "../src/database/specialServiceWorkflowRepository";
 
 config();
 
@@ -46,6 +47,9 @@ async function main() {
 
     console.log("10/13 - Creando movimientos de servicios especiales...");
     await migrateSpecialServiceMovementTypesSchema();
+
+    console.log("10b/13 - Creando configuración de estados y movimientos por servicio especial...");
+    await ensureSpecialServiceWorkflowSchema();
 
     console.log("11/13 - Creando tabla debts...");
     await migrateDebtsSchema();

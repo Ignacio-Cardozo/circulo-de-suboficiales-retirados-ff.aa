@@ -19,10 +19,113 @@
   font-weight: 700;
   color: var(--azul-armada);
   margin: 0;
+  text-align: center;
+}
+
+.welcome-username {
+  color: var(--azul-institucional);
+  overflow-wrap: anywhere;
 }
 
 .welcome-sub {
   font-size: 15px;
   color: var(--muted);
   margin: 0;
+}
+
+/* Accesos rápidos: todos en una misma fila, ícono grande arriba y texto abajo. */
+.welcome-shortcuts {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 960px;
+  margin-top: 8px;
+  padding: 4px;
+  overflow-x: auto;
+}
+
+.welcome-shortcut {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 110px;
+  max-width: 150px;
+  padding: 20px 12px 16px;
+  border: 1px solid var(--gris-medio);
+  border-radius: 14px;
+  background: var(--card-bg);
+  color: var(--azul-armada);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(17, 34, 58, 0.04);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.welcome-shortcut:hover {
+  border-color: var(--azul-institucional);
+  box-shadow: 0 6px 16px rgba(17, 34, 58, 0.1);
+  transform: translateY(-2px);
+}
+
+.welcome-shortcut:focus-visible {
+  outline: 2px solid var(--azul-institucional);
+  outline-offset: 2px;
+}
+
+.welcome-shortcut-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 16px;
+  background: rgba(27, 58, 107, 0.08);
+  color: var(--azul-institucional);
+  transition: background 0.15s, color 0.15s;
+}
+
+.welcome-shortcut:hover .welcome-shortcut-icon {
+  background: var(--azul-institucional);
+  color: #fff;
+}
+
+.welcome-shortcut-label {
+  line-height: 1.25;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-shortcut {
+    transition: none;
+  }
+
+  .welcome-shortcut:hover {
+    transform: none;
+  }
+}
+
+@media (max-height: 800px) {
+  .welcome-root {
+    gap: 16px;
+  }
+
+  .welcome-logo {
+    width: 150px;
+  }
+
+  .welcome-shortcut {
+    padding: 16px 10px 12px;
+  }
+
+  .welcome-shortcut-icon {
+    width: 56px;
+    height: 56px;
+  }
 }

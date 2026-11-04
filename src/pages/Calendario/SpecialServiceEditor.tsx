@@ -12,6 +12,17 @@ import {
     saveSpecialServiceAddon,
     type SpecialServiceAddonItem,
 } from "../../services/specialServiceAddonsApi";
+import {
+    saveSpecialServiceWorkflow,
+    type SpecialServiceWorkflowInput,
+} from "../../services/specialServiceWorkflowApi";
+import { useSpecialServiceWorkflowStore } from "../../store/specialServiceWorkflowStore";
+import SpecialServiceWorkflowFields from "../../components/service/SpecialServiceWorkflowFields";
+import {
+    emptyWorkflowDraft,
+    getWorkflowDraftError,
+    workflowToDraft,
+} from "../../utils/specialServiceWorkflow";
 import { formatNumberInput, parseMoney, toCurrency } from "../../utils/format";
 
 export type SpecialServiceEditorMode = "create" | "edit";
@@ -66,6 +77,29 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
     const [saved, setSaved] = useState(false);
     const [createdServiceId, setCreatedServiceId] = useState<string | null>(null);
 
+    const [workflowDraft, setWorkflowDraft] = useState<SpecialServiceWorkflowInput>(emptyWorkflowDraft);
+    const [loadingWorkflow, setLoadingWorkflow] = useState(mode === "edit" && !!service);
+    const [workflowLoadFailed, setWorkflowLoadFailed] = useState(false);
+    const loadWorkflow = useSpecialServiceWorkflowStore((state) => state.load);
+    const setStoredWorkflow = useSpecialServiceWorkflowStore((state) => state.setWorkflow);
+
+    useEffect(() => {
+        if (mode !== "edit" || !service) return;
+        let cancelled = false;
+        void loadWorkflow(service.id, true).then((workflow) => {
+            if (cancelled) return;
+            if (workflow) setWorkflowDraft(workflowToDraft(workflow));
+            else {
+                setWorkflowLoadFailed(true);
+                setError("No se pudo cargar la configuración de estados y movimientos. Cerrá el panel y volvé a abrirlo.");
+            }
+            setLoadingWorkflow(false);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [mode, service, loadWorkflow]);
+
     useEffect(() => {
         if (mode !== "edit" || !service) return;
         let cancelled = false;
@@ -119,6 +153,11 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
             setError("Ingresá el nombre del servicio.");
             return;
         }
+        const workflowError = getWorkflowDraftError(workflowDraft);
+        if (workflowError) {
+            setError(workflowError);
+            return;
+        }
 
         setSaving(true);
         try {
@@ -156,6 +195,14 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
                 });
                 setDraftAddons((prev) => prev.filter((item) => item.tempId !== draft.tempId));
             }
+
+            const workflow = await saveSpecialServiceWorkflow(savedService.id, workflowDraft);
+            setStoredWorkflow(workflow);
+            savedService = {
+                ...savedService,
+                custom_statuses: workflow.custom_statuses,
+                custom_movement_types: workflow.custom_movement_types,
+            };
 
             setSaved(true);
             onSaved(savedService, isNew);
@@ -334,6 +381,16 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
                     )}
                 </div>
 
+                <div className="ss-editor-section">
+                    <span className="ss-editor-section-title">Estados y movimientos</span>
+                    <SpecialServiceWorkflowFields
+                        value={workflowDraft}
+                        onChange={setWorkflowDraft}
+                        disabled={saving}
+                        loading={loadingWorkflow}
+                    />
+                </div>
+
                 {error && (
                     <div className="ss-editor-error">
                         <AlertCircle size={16} /> {error}
@@ -352,7 +409,7 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
                     <button
                         type="submit"
                         className="ss-btn ss-btn-primary"
-                        disabled={saving}
+                        disabled={saving || loadingWorkflow || workflowLoadFailed}
                     >
                         {saving ? (
                             <>

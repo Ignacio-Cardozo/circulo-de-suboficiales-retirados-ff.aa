@@ -1854,28 +1854,80 @@
   box-shadow: inset 0 0 0 1px rgba(21, 128, 61, 0.35);
 }
 
-.ss-detail-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--border);
-  background: #fff;
+/* Ya registrado: no se puede volver a registrar, pero se tiene que seguir leyendo bien. */
+.ss-movement-action.is-done:disabled {
+  opacity: 0.75;
+  cursor: default;
 }
 
-.ss-detail-footer .ss-btn {
+/* Registrado y luego anulado: se puede volver a registrar. */
+.ss-movement-annulled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  color: var(--azul-institucional);
+  flex-shrink: 0;
+}
+
+.ss-movement-action.is-annulled {
+  box-shadow: inset 0 0 0 1px rgba(27, 58, 107, 0.35);
+}
+
+.ss-movement-tag.annulled {
+  gap: 3px;
+  background: rgba(27, 58, 107, 0.1);
+  color: var(--azul-institucional);
+}
+
+.ss-movement-item.is-annulled {
+  border-left-color: var(--azul-institucional);
+  background: #f8fafc;
+}
+
+.ss-movement-item.is-annulled .ss-movement-item-label,
+.ss-movement-item.is-annulled .ss-movement-item-amount {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* Modal de detalle: termina 10px por encima del footer de la app (.layout-footer)
+   y el contenido scrollea por dentro, con el encabezado siempre visible. */
+.cal-page {
+  --app-footer-height: 40px;
+}
+
+@media (max-height: 800px) {
+  .cal-page {
+    --app-footer-height: 32px;
+  }
+}
+
+.cal-page .modal-overlay:has(> .ss-detail-modal) {
+  padding-bottom: calc(var(--app-footer-height) + 10px);
+}
+
+.cal-page .modal-content.ss-detail-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 16px - var(--app-footer-height) - 10px);
+  overflow: hidden;
+}
+
+.ss-detail-modal .modal-header {
+  flex-shrink: 0;
+}
+
+.ss-detail-modal .ss-detail-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ss-detail-actions .ss-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.ss-detail-footer .ss-btn-secondary {
-  margin-right: auto;
 }
 
 @media (max-width: 900px) {

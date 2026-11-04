@@ -8,6 +8,8 @@ export type SpecialServiceStatusRow = {
     movement_type: "ingreso" | "egreso";
     movement_type_key: string | null;
     sort_order: number;
+    /** Forma parte de la lista base que usan los servicios sin configuración propia. */
+    is_default: boolean;
     created_at: string;
     updated_at: string;
 };
@@ -18,6 +20,7 @@ export type SpecialServiceStatusInput = {
     includes_movement: boolean;
     movement_type: "ingreso" | "egreso";
     movement_type_key?: string | null;
+    is_default?: boolean;
 };
 
 export const CANCELED_SPECIAL_SERVICE_STATUS_KEY = "cancelado";
@@ -97,6 +100,10 @@ export async function ensureSpecialServiceStatusesTable(): Promise<void> {
             created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
             updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
         )
+    `;
+    await sql`
+        ALTER TABLE special_service_statuses
+        ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT TRUE
     `;
     const columns = (await sql`
         SELECT column_name
@@ -214,6 +221,7 @@ export async function getAllSpecialServiceStatuses(): Promise<SpecialServiceStat
             movement_type,
             movement_type_key,
             sort_order,
+            is_default,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_service_statuses
@@ -274,7 +282,7 @@ export async function insertSpecialServiceStatus(
     const sortOrder = orderRows[0]?.next_order ?? 0;
     const rows = (await sql`
         INSERT INTO special_service_statuses (
-            key, label, color, includes_movement, movement_type, movement_type_key, sort_order
+            key, label, color, includes_movement, movement_type, movement_type_key, sort_order, is_default
         )
         VALUES (
             ${key},
@@ -283,7 +291,8 @@ export async function insertSpecialServiceStatus(
             ${data.includes_movement},
             ${data.movement_type},
             ${data.movement_type_key ?? null},
-            ${sortOrder}
+            ${sortOrder},
+            ${data.is_default ?? true}
         )
         RETURNING
             key,
@@ -293,6 +302,7 @@ export async function insertSpecialServiceStatus(
             movement_type,
             movement_type_key,
             sort_order,
+            is_default,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceStatusRow[];
@@ -312,6 +322,7 @@ export async function updateSpecialServiceStatus(
             includes_movement = ${data.includes_movement},
             movement_type = ${data.movement_type},
             movement_type_key = ${data.movement_type_key ?? null},
+            is_default = COALESCE(${data.is_default ?? null}::boolean, is_default),
             updated_at = NOW()
         WHERE key = ${key}
         RETURNING
@@ -322,6 +333,7 @@ export async function updateSpecialServiceStatus(
             movement_type,
             movement_type_key,
             sort_order,
+            is_default,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceStatusRow[];

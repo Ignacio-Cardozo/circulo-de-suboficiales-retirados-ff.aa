@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Save, Loader, Plus, Trash2, Pencil, X, Search, ArrowUpDown } from "lucide-react";
 import {
     saveSpecialService,
@@ -13,6 +13,17 @@ import {
     deleteSpecialServiceAddon,
     type SpecialServiceAddonItem,
 } from "../../services/specialServiceAddonsApi";
+import {
+    saveSpecialServiceWorkflow,
+    type SpecialServiceWorkflowInput,
+} from "../../services/specialServiceWorkflowApi";
+import { useSpecialServiceWorkflowStore } from "../../store/specialServiceWorkflowStore";
+import SpecialServiceWorkflowFields from "../../components/service/SpecialServiceWorkflowFields";
+import {
+    emptyWorkflowDraft,
+    getWorkflowDraftError,
+    workflowToDraft,
+} from "../../utils/specialServiceWorkflow";
 import { formatNumberInput, parseMoney } from "../../utils/format";
 
 interface SpecialServicesConfigProps {
@@ -38,6 +49,12 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
     const [addonName, setAddonName] = useState("");
     const [addonCost, setAddonCost] = useState("");
     const [savingAddon, setSavingAddon] = useState(false);
+    const [workflowDraft, setWorkflowDraft] = useState<SpecialServiceWorkflowInput>(emptyWorkflowDraft);
+    const [loadingWorkflow, setLoadingWorkflow] = useState(false);
+    const [workflowLoadFailed, setWorkflowLoadFailed] = useState(false);
+    const workflowRequestRef = useRef<string | null>(null);
+    const loadWorkflow = useSpecialServiceWorkflowStore((state) => state.load);
+    const setStoredWorkflow = useSpecialServiceWorkflowStore((state) => state.setWorkflow);
 
     useEffect(() => {
         let cancelled = false;
@@ -69,11 +86,20 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
         setAddonError(null);
         setAddonName("");
         setAddonCost("");
+        setWorkflowDraft(emptyWorkflowDraft());
+        setLoadingWorkflow(false);
+        setWorkflowLoadFailed(false);
+        workflowRequestRef.current = null;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) return;
+        const workflowError = getWorkflowDraftError(workflowDraft);
+        if (workflowError) {
+            setError(workflowError);
+            return;
+        }
         setSaving(true);
         setError(null);
         try {
@@ -84,13 +110,29 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                 person_price: parseMoney(personPrice),
                 deposit_cost: parseMoney(depositCost),
             };
+            let saved: SpecialServiceItem;
             if (editId) {
-                const updated = await updateSpecialService(editId, payload);
-                setServices((prev) => prev.map((s) => (s.id === editId ? updated : s)));
+                saved = await updateSpecialService(editId, payload);
+                setServices((prev) => prev.map((s) => (s.id === editId ? saved : s)));
             } else {
-                const created = await saveSpecialService(payload);
-                setServices((prev) => [...prev, created]);
+                saved = await saveSpecialService(payload);
+                setServices((prev) => [...prev, saved]);
+                // Si falla la configuración, el reintento actualiza este servicio en vez de duplicarlo.
+                setEditId(saved.id);
             }
+            const workflow = await saveSpecialServiceWorkflow(saved.id, workflowDraft);
+            setStoredWorkflow(workflow);
+            setServices((prev) =>
+                prev.map((s) =>
+                    s.id === saved.id
+                        ? {
+                              ...s,
+                              custom_statuses: workflow.custom_statuses,
+                              custom_movement_types: workflow.custom_movement_types,
+                          }
+                        : s
+                )
+            );
             resetForm();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Error al guardar servicio especial");
@@ -110,6 +152,20 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
         setAddonError(null);
         setAddonName("");
         setAddonCost("");
+        setWorkflowDraft(emptyWorkflowDraft());
+        setLoadingWorkflow(true);
+        setWorkflowLoadFailed(false);
+        workflowRequestRef.current = svc.id;
+        void loadWorkflow(svc.id, true).then((workflow) => {
+            // Ignora la respuesta si mientras tanto se empezó a editar otro servicio.
+            if (workflowRequestRef.current !== svc.id) return;
+            if (workflow) setWorkflowDraft(workflowToDraft(workflow));
+            else {
+                setWorkflowLoadFailed(true);
+                setError("No se pudo cargar la configuración de estados y movimientos del servicio. Volvé a intentar editarlo.");
+            }
+            setLoadingWorkflow(false);
+        });
         setLoadingAddons(true);
         try {
             const data = await fetchSpecialServiceAddons(svc.id);
@@ -252,9 +308,22 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                         placeholder="0.00"
                     />
                 </div>
+                <div className="config-field">
+                    <label>Estados y movimientos del servicio</label>
+                    <SpecialServiceWorkflowFields
+                        value={workflowDraft}
+                        onChange={setWorkflowDraft}
+                        disabled={saving}
+                        loading={loadingWorkflow}
+                    />
+                </div>
                 {error && <div className="config-error">{error}</div>}
                 <div className="config-form-actions">
-                    <button type="submit" className="config-save-btn" disabled={saving || !name.trim()}>
+                    <button
+                        type="submit"
+                        className="config-save-btn"
+                        disabled={saving || loadingWorkflow || workflowLoadFailed || !name.trim()}
+                    >
                         {saving ? (
                             <>
                                 <Loader size={16} className="spin" /> Guardando...
@@ -399,7 +468,9 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                                     <th className="num">Precio socio</th>
                                     <th className="num">Precio persona</th>
                                     <th className="num">Costo seña</th>
-                                    <th className="num">Añadidos</th>
+                                    <th className="center">Añadidos</th>
+                                    <th className="center">Estados</th>
+                                    <th className="center">Movimientos</th>
                                     <th className="actions">Acciones</th>
                                 </tr>
                             </thead>
@@ -417,7 +488,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                                         <td className="num">
                                             $ {svc.deposit_cost.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                                         </td>
-                                        <td className="num">
+                                        <td className="center">
                                             <button
                                                 type="button"
                                                 className={`special-addons-count${(addonCounts[svc.id] ?? 0) === 0 ? " is-empty" : ""}`}
@@ -426,6 +497,22 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                                             >
                                                 {addonCounts[svc.id] ?? 0}
                                             </button>
+                                        </td>
+                                        <td className="center">
+                                            <span
+                                                className={`special-workflow-tag${svc.custom_statuses ? " is-custom" : ""}`}
+                                                title={svc.custom_statuses ? "Estados personalizados del servicio" : "Usa la lista base de estados"}
+                                            >
+                                                {svc.custom_statuses ? "Pers." : "Base"}
+                                            </span>
+                                        </td>
+                                        <td className="center">
+                                            <span
+                                                className={`special-workflow-tag${svc.custom_movement_types ? " is-custom" : ""}`}
+                                                title={svc.custom_movement_types ? "Movimientos personalizados del servicio" : "Usa la lista base de movimientos"}
+                                            >
+                                                {svc.custom_movement_types ? "Pers." : "Base"}
+                                            </span>
                                         </td>
                                         <td className="actions">
                                             <button
@@ -461,7 +548,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                                 ))}
                                 {filteredServices.length === 0 && (
                                     <tr>
-                                        <td colSpan={7} className="svc-list-empty">
+                                        <td colSpan={9} className="svc-list-empty">
                                             No se encontraron servicios
                                         </td>
                                     </tr>

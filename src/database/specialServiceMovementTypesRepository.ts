@@ -14,6 +14,8 @@ export type SpecialServiceMovementTypeRow = {
     includes_movement: boolean;
     movement_type: MovementDirection;
     sort_order: number;
+    /** Forma parte de la lista base que usan los servicios sin configuración propia. */
+    is_default: boolean;
     created_at: string;
     updated_at: string;
 };
@@ -22,6 +24,7 @@ export type SpecialServiceMovementTypeInput = {
     label: string;
     includes_movement: boolean;
     movement_type: MovementDirection;
+    is_default?: boolean;
 };
 
 export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
@@ -62,6 +65,10 @@ export async function ensureSpecialServiceMovementTypesTable(): Promise<void> {
             created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
             updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
         )
+    `;
+    await sql`
+        ALTER TABLE special_service_movement_types
+        ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT TRUE
     `;
 }
 
@@ -164,6 +171,7 @@ export async function getAllSpecialServiceMovementTypes(): Promise<SpecialServic
             includes_movement,
             movement_type,
             sort_order,
+            is_default,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_service_movement_types
@@ -184,6 +192,7 @@ export async function getSpecialServiceMovementTypeByKey(
             includes_movement,
             movement_type,
             sort_order,
+            is_default,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_service_movement_types
@@ -238,14 +247,15 @@ export async function insertSpecialServiceMovementType(
     const sortOrder = orderRows[0]?.next_order ?? 0;
     const rows = (await sql`
         INSERT INTO special_service_movement_types (
-            key, label, includes_movement, movement_type, sort_order
+            key, label, includes_movement, movement_type, sort_order, is_default
         )
         VALUES (
             ${key},
             ${data.label.trim()},
             ${data.includes_movement},
             ${data.movement_type},
-            ${sortOrder}
+            ${sortOrder},
+            ${data.is_default ?? true}
         )
         RETURNING
             key,
@@ -253,6 +263,7 @@ export async function insertSpecialServiceMovementType(
             includes_movement,
             movement_type,
             sort_order,
+            is_default,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceMovementTypeRow[];
@@ -270,6 +281,7 @@ export async function updateSpecialServiceMovementType(
             label = ${data.label.trim()},
             includes_movement = ${data.includes_movement},
             movement_type = ${data.movement_type},
+            is_default = COALESCE(${data.is_default ?? null}::boolean, is_default),
             updated_at = NOW()
         WHERE key = ${key}
         RETURNING
@@ -278,6 +290,7 @@ export async function updateSpecialServiceMovementType(
             includes_movement,
             movement_type,
             sort_order,
+            is_default,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceMovementTypeRow[];
@@ -423,6 +436,26 @@ export async function insertSpecialServiceRecordMovement(
         : null;
     if (data.movement_type_key && !movementType) {
         throw new Error("Tipo de movimiento inválido");
+    }
+
+    // Un tipo de movimiento sólo puede estar registrado una vez por servicio, salvo que
+    // el anterior se haya anulado (o se haya borrado su movimiento de caja).
+    if (data.movement_type_key) {
+        const activeRows = (await sql`
+            SELECT m.label
+            FROM special_service_record_movements m
+            LEFT JOIN petty_cash pc ON pc.id = m.movement_id
+            WHERE m.record_id = ${data.record_id}
+              AND m.movement_type_key = ${data.movement_type_key}
+              AND COALESCE(pc.anulado, FALSE) = FALSE
+              AND (m.includes_movement = FALSE OR m.movement_id IS NOT NULL)
+            LIMIT 1
+        `) as { label: string }[];
+        if (activeRows.length > 0) {
+            throw new Error(
+                `Ya hay un "${activeRows[0].label}" registrado para este servicio. Anulalo para poder registrarlo de nuevo.`
+            );
+        }
     }
 
     const label = (data.label ?? movementType?.label ?? "Movimiento").trim();
