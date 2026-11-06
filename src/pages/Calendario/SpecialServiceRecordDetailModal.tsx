@@ -9,6 +9,7 @@ import {
     ExternalLink,
     FileText,
     Loader,
+    MessageSquare,
     Package,
     Pencil,
     Plus,
@@ -168,6 +169,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
     const [amount, setAmount] = useState(formatNumberInput(record.amount));
     const [date, setDate] = useState(toDateInputValue(record.date) || todayLocal());
     const [serviceDate, setServiceDate] = useState(toDateInputValue(record.service_date));
+    const [detailText, setDetailText] = useState(record.detail ?? "");
 
     useEffect(() => {
         void loadStatuses();
@@ -397,6 +399,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
             amount !== formatNumberInput(record.amount) ||
             date !== (toDateInputValue(record.date) || todayLocal()) ||
             serviceDate !== toDateInputValue(record.service_date) ||
+            detailText.trim() !== (record.detail ?? "") ||
             status !== record.status
         );
     }, [
@@ -409,6 +412,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
         amount,
         date,
         serviceDate,
+        detailText,
         status,
     ]);
 
@@ -422,6 +426,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
         setAmount(formatNumberInput(record.amount));
         setDate(toDateInputValue(record.date) || todayLocal());
         setServiceDate(toDateInputValue(record.service_date));
+        setDetailText(record.detail ?? "");
         setStatus(record.status);
         setMemberSearch(record.member_nombre ?? "");
         setPersonSearch(record.person_nombre ?? "");
@@ -746,6 +751,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                 amount: parseMoney(amount),
                 date,
                 service_date: serviceDate,
+                detail: detailText.trim() || null,
                 status: effectiveStatus,
             });
             onUpdated(updated);
@@ -922,6 +928,19 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                             </div>
 
                             <div className="ss-field">
+                                <label htmlFor="ss-detail-record-detail">Detalles</label>
+                                <textarea
+                                    id="ss-detail-record-detail"
+                                    className="ss-input ss-textarea"
+                                    value={detailText}
+                                    onChange={(e) => setDetailText(e.target.value)}
+                                    maxLength={1000}
+                                    rows={3}
+                                    placeholder="Opcional: un mensaje adicional para este servicio"
+                                />
+                            </div>
+
+                            <div className="ss-field">
                                 <label>Estado</label>
                                 <SpecialServiceStatusSteps
                                     statuses={stepStatuses}
@@ -1072,6 +1091,15 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                         </div>
                                     </div>
                                 </div>
+                                {record.detail && (
+                                    <div className="ss-detail-field">
+                                        <span className="ss-detail-icon"><MessageSquare size={14} /></span>
+                                        <div className="ss-detail-grow">
+                                            <span className="ss-detail-label">Detalles</span>
+                                            <span className="ss-detail-value ss-detail-note">{record.detail}</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="ss-status-editor">

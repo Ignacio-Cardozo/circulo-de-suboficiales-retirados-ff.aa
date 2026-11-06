@@ -61,6 +61,7 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
     const [amountTouched, setAmountTouched] = useState(false);
     const [date, setDate] = useState(todayLocal());
     const [serviceDate, setServiceDate] = useState("");
+    const [detail, setDetail] = useState("");
     const [status, setStatus] = useState("registrado");
     const statuses = useSpecialServiceStatusesStore((state) => state.statuses);
     const loadStatuses = useSpecialServiceStatusesStore((state) => state.load);
@@ -353,6 +354,7 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                 amount: parseMoney(amountValue),
                 date,
                 service_date: serviceDate,
+                detail: detail.trim() || null,
                 status: effectiveStatus,
                 addons: selectedAddons.map((addon) => ({
                     addon_id: addon.id,
@@ -588,6 +590,19 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                                 required
                                 value={serviceDate}
                                 onChange={setServiceDate}
+                            />
+                        </div>
+
+                        <div className="ss-field">
+                            <label htmlFor="ss-record-detail">Detalles</label>
+                            <textarea
+                                id="ss-record-detail"
+                                className="ss-input ss-textarea"
+                                value={detail}
+                                onChange={(e) => setDetail(e.target.value)}
+                                maxLength={1000}
+                                rows={3}
+                                placeholder="Opcional: un mensaje adicional para este servicio"
                             />
                         </div>
 

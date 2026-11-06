@@ -42,6 +42,8 @@ export type SpecialServiceRecordWithDetails = {
     amount: number;
     date: string;
     service_date: string | null;
+    /** Mensaje adicional opcional del servicio agendado. */
+    detail: string | null;
     status: string;
     addons: SpecialServiceRecordAddonRow[];
     created_at: string;
@@ -57,9 +59,18 @@ export type SpecialServiceRecordInput = {
     amount?: number;
     date: string;
     service_date?: string | null;
+    detail?: string | null;
     status?: string;
     addons?: SpecialServiceRecordAddonInput[];
 };
+
+/** Normaliza el detalle opcional: sin espacios de más, vacío como null, hasta 1000 caracteres. */
+export function parseSpecialServiceRecordDetail(value: unknown): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim().slice(0, 1000);
+    return trimmed || null;
+}
 
 async function migrateSpecialServiceRecordsSchemaTask(): Promise<void> {
     const sql = getSql();
@@ -93,6 +104,7 @@ async function migrateSpecialServiceRecordsSchemaTask(): Promise<void> {
         await sql`ALTER TABLE special_service_records ALTER COLUMN status TYPE TEXT USING status::text`;
         await sql`ALTER TABLE special_service_records ALTER COLUMN status SET DEFAULT 'registrado'`;
     }
+    await sql`ALTER TABLE special_service_records ADD COLUMN IF NOT EXISTS detail TEXT`;
     await sql`CREATE INDEX IF NOT EXISTS idx_special_service_records_service_id ON special_service_records (special_service_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_special_service_records_member_id ON special_service_records (member_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_special_service_records_person_id ON special_service_records (person_id)`;
@@ -162,6 +174,7 @@ export async function getAllSpecialServiceRecords(): Promise<SpecialServiceRecor
             sr.amount::float AS amount,
             sr.date::text AS date,
             sr.service_date::text AS service_date,
+            sr.detail,
             sr.status,
             sr.created_at::text AS created_at,
             sr.updated_at::text AS updated_at
@@ -195,6 +208,7 @@ export async function getSpecialServiceRecordById(id: string): Promise<SpecialSe
             sr.amount::float AS amount,
             sr.date::text AS date,
             sr.service_date::text AS service_date,
+            sr.detail,
             sr.status,
             sr.created_at::text AS created_at,
             sr.updated_at::text AS updated_at
@@ -232,6 +246,7 @@ export async function getSpecialServiceRecordsByMember(memberId: string): Promis
             sr.amount::float AS amount,
             sr.date::text AS date,
             sr.service_date::text AS service_date,
+            sr.detail,
             sr.status,
             sr.created_at::text AS created_at,
             sr.updated_at::text AS updated_at
@@ -266,6 +281,7 @@ export async function getSpecialServiceRecordsByPerson(personId: string): Promis
             sr.amount::float AS amount,
             sr.date::text AS date,
             sr.service_date::text AS service_date,
+            sr.detail,
             sr.status,
             sr.created_at::text AS created_at,
             sr.updated_at::text AS updated_at
@@ -300,6 +316,7 @@ export async function getSpecialServiceRecordsByMovement(movementId: string): Pr
             sr.amount::float AS amount,
             sr.date::text AS date,
             sr.service_date::text AS service_date,
+            sr.detail,
             sr.status,
             sr.created_at::text AS created_at,
             sr.updated_at::text AS updated_at
@@ -323,7 +340,7 @@ export async function insertSpecialServiceRecord(data: SpecialServiceRecordInput
     const id = randomUUID();
     await sql`
         INSERT INTO special_service_records (
-            id, special_service_id, member_id, person_id, amount, date, service_date, status
+            id, special_service_id, member_id, person_id, amount, date, service_date, detail, status
         )
         VALUES (
             ${id},
@@ -333,6 +350,7 @@ export async function insertSpecialServiceRecord(data: SpecialServiceRecordInput
             ${data.amount ?? 0},
             ${data.date},
             ${data.service_date ?? null},
+            ${data.detail ?? null},
             ${data.status ?? "registrado"}
         )
     `;
@@ -370,6 +388,7 @@ export async function updateSpecialServiceRecord(
     if (data.amount !== undefined) { fields.push(`amount = $${idx++}`); values.push(data.amount); }
     if (data.date !== undefined) { fields.push(`date = $${idx++}`); values.push(data.date); }
     if (data.service_date !== undefined) { fields.push(`service_date = $${idx++}`); values.push(data.service_date); }
+    if (data.detail !== undefined) { fields.push(`detail = $${idx++}`); values.push(data.detail); }
     if (data.status !== undefined) { fields.push(`status = $${idx++}`); values.push(data.status); }
 
     if (fields.length > 0) {

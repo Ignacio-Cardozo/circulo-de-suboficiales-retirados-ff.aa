@@ -31,6 +31,8 @@ export type SpecialServiceRecordItem = {
     amount: number;
     date: string;
     service_date: string | null;
+    /** Mensaje adicional opcional del servicio agendado. */
+    detail: string | null;
     status: string;
     addons: SpecialServiceRecordAddon[];
     created_at: string;
@@ -44,6 +46,7 @@ export type SpecialServiceRecordInput = {
     amount?: number;
     date: string;
     service_date?: string | null;
+    detail?: string | null;
     status?: string;
     addons?: SpecialServiceRecordAddonInput[];
 };

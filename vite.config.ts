@@ -1468,6 +1468,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
               getSpecialServiceRecordsByPerson,
               getSpecialServiceRecordsByMovement,
               insertSpecialServiceRecord,
+              parseSpecialServiceRecordDetail,
               updateSpecialServiceRecord,
               cancelSpecialServiceRecord,
             } = await import("./src/database/specialServiceRecordsRepository");
@@ -1567,6 +1568,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 amount: body.amount ?? 0,
                 date: body.date,
                 service_date: body.service_date ?? null,
+                detail: parseSpecialServiceRecordDetail(body.detail) ?? null,
                 status: body.status,
                 addons: Array.isArray(body.addons) ? body.addons : [],
               });
@@ -1616,6 +1618,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 amount: body.amount,
                 date: body.date,
                 service_date: body.service_date,
+                detail: parseSpecialServiceRecordDetail(body.detail),
                 status: body.status,
               });
               if (!result) {

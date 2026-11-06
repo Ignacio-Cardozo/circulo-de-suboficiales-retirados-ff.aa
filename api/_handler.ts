@@ -1240,6 +1240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
         getSpecialServiceRecordsByPerson,
         getSpecialServiceRecordsByMovement,
         insertSpecialServiceRecord,
+        parseSpecialServiceRecordDetail,
         updateSpecialServiceRecord,
         cancelSpecialServiceRecord,
       } = await import("../src/database/specialServiceRecordsRepository.js");
@@ -1336,6 +1337,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           amount: amount ?? 0,
           date,
           service_date: service_date ?? null,
+          detail: parseSpecialServiceRecordDetail(req.body.detail) ?? null,
           status,
           addons: Array.isArray(req.body.addons) ? req.body.addons : [],
         });
@@ -1389,6 +1391,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           amount,
           date,
           service_date,
+          detail: parseSpecialServiceRecordDetail(req.body.detail),
           status,
         });
         if (!result) {
