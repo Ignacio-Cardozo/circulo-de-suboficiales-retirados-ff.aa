@@ -3,10 +3,33 @@ import { getSql } from "./connection.js";
 import { getNextAndIncrementReceipt } from "./initialBalancesRepository.js";
 import { getComprobanteByMovementId, insertComprobante, type ComprobanteRow } from "./comprobantesRepository.js";
 import { insertMovement } from "./pettyCashRepository.js";
+import { insertDebt, migrateDebtsSchema } from "./debtsRepository.js";
 import { migrateSpecialServiceRecordsSchema } from "./specialServiceRecordsRepository.js";
+import { runOnce } from "./runOnce.js";
 
 export type MovementDirection = "ingreso" | "egreso";
-export type MovementMode = "efectivo" | "transferencia";
+/** "cuenta_corriente": el socio paga con su cuenta corriente (no entra dinero a caja). */
+export type MovementMode = "efectivo" | "transferencia" | "cuenta_corriente";
+
+export function parseMovementMode(value: unknown): MovementMode {
+    return value === "transferencia" || value === "cuenta_corriente" ? value : "efectivo";
+}
+
+/**
+ * Monto que se sugiere al registrar un movimiento de este tipo:
+ * - total: el total del servicio.
+ * - sena: el costo de la seña.
+ * - saldo: el total menos la seña (la pagada, o el costo de la seña si todavía no se pagó).
+ * - seguro: el costo del seguro.
+ * - manual: sin sugerencia.
+ */
+export type MovementAmountSource = "total" | "sena" | "saldo" | "seguro" | "manual";
+
+const AMOUNT_SOURCES: MovementAmountSource[] = ["total", "sena", "saldo", "seguro", "manual"];
+
+export function parseMovementAmountSource(value: unknown): MovementAmountSource | undefined {
+    return AMOUNT_SOURCES.includes(value as MovementAmountSource) ? (value as MovementAmountSource) : undefined;
+}
 
 export type SpecialServiceMovementTypeRow = {
     key: string;
@@ -16,6 +39,7 @@ export type SpecialServiceMovementTypeRow = {
     sort_order: number;
     /** Forma parte de la lista base que usan los servicios sin configuración propia. */
     is_default: boolean;
+    amount_source: MovementAmountSource;
     created_at: string;
     updated_at: string;
 };
@@ -25,6 +49,7 @@ export type SpecialServiceMovementTypeInput = {
     includes_movement: boolean;
     movement_type: MovementDirection;
     is_default?: boolean;
+    amount_source?: MovementAmountSource;
 };
 
 export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
@@ -37,6 +62,7 @@ export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
         movement_type: "ingreso",
         sort_order: 0,
         is_default: true,
+        amount_source: "sena",
     },
     {
         key: "pago",
@@ -45,6 +71,7 @@ export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
         movement_type: "ingreso",
         sort_order: 1,
         is_default: true,
+        amount_source: "saldo",
     },
     {
         key: "devolucion_seguro",
@@ -53,6 +80,7 @@ export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
         movement_type: "egreso",
         sort_order: 2,
         is_default: true,
+        amount_source: "seguro",
     },
     {
         key: "pago_de_seguro",
@@ -61,10 +89,11 @@ export const DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES: Array<
         movement_type: "ingreso",
         sort_order: 3,
         is_default: true,
+        amount_source: "seguro",
     },
 ];
 
-export async function ensureSpecialServiceMovementTypesTable(): Promise<void> {
+async function ensureSpecialServiceMovementTypesTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS special_service_movement_types (
@@ -81,9 +110,31 @@ export async function ensureSpecialServiceMovementTypesTable(): Promise<void> {
         ALTER TABLE special_service_movement_types
         ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT TRUE
     `;
+    const amountColumn = (await sql`
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'special_service_movement_types'
+          AND column_name = 'amount_source'
+        LIMIT 1
+    `) as { "?column?": number }[];
+    if (amountColumn.length === 0) {
+        await sql`
+            ALTER TABLE special_service_movement_types
+            ADD COLUMN IF NOT EXISTS amount_source VARCHAR(20) NOT NULL DEFAULT 'total'
+        `;
+        // Columna nueva: los movimientos base toman el monto que les corresponde.
+        for (const movementType of DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES) {
+            await sql`
+                UPDATE special_service_movement_types
+                SET amount_source = ${movementType.amount_source ?? "total"}
+                WHERE key = ${movementType.key}
+            `;
+        }
+    }
 }
 
-export async function ensureSpecialServiceRecordMovementsTable(): Promise<void> {
+async function ensureSpecialServiceRecordMovementsTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS special_service_record_movements (
@@ -103,9 +154,12 @@ export async function ensureSpecialServiceRecordMovementsTable(): Promise<void> 
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_special_service_record_movements_record_id ON special_service_record_movements (record_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_special_service_record_movements_movement_id ON special_service_record_movements (movement_id)`;
+    // Cargo en la cuenta corriente del socio cuando el movimiento se paga con ella.
+    await migrateDebtsSchema();
+    await sql`ALTER TABLE special_service_record_movements ADD COLUMN IF NOT EXISTS debt_id UUID REFERENCES debts(id) ON DELETE SET NULL`;
 }
 
-export async function migrateSpecialServiceMovementTypesSchema(): Promise<void> {
+async function migrateSpecialServiceMovementTypesSchemaTask(): Promise<void> {
     await migrateSpecialServiceRecordsSchema();
     await ensureSpecialServiceMovementTypesTable();
     await ensureSpecialServiceRecordMovementsTable();
@@ -119,7 +173,7 @@ export async function migrateSpecialServiceMovementTypesSchema(): Promise<void> 
         for (const movementType of DEFAULT_SPECIAL_SERVICE_MOVEMENT_TYPES) {
             await sql`
                 INSERT INTO special_service_movement_types (
-                    key, label, includes_movement, movement_type, sort_order, is_default
+                    key, label, includes_movement, movement_type, sort_order, is_default, amount_source
                 )
                 VALUES (
                     ${movementType.key},
@@ -127,7 +181,8 @@ export async function migrateSpecialServiceMovementTypesSchema(): Promise<void> 
                     ${movementType.includes_movement},
                     ${movementType.movement_type},
                     ${movementType.sort_order},
-                    ${movementType.is_default ?? true}
+                    ${movementType.is_default ?? true},
+                    ${movementType.amount_source ?? "total"}
                 )
                 ON CONFLICT (key) DO NOTHING
             `;
@@ -184,6 +239,7 @@ export async function getAllSpecialServiceMovementTypes(): Promise<SpecialServic
             movement_type,
             sort_order,
             is_default,
+            amount_source,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_service_movement_types
@@ -205,6 +261,7 @@ export async function getSpecialServiceMovementTypeByKey(
             movement_type,
             sort_order,
             is_default,
+            amount_source,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_service_movement_types
@@ -259,7 +316,7 @@ export async function insertSpecialServiceMovementType(
     const sortOrder = orderRows[0]?.next_order ?? 0;
     const rows = (await sql`
         INSERT INTO special_service_movement_types (
-            key, label, includes_movement, movement_type, sort_order, is_default
+            key, label, includes_movement, movement_type, sort_order, is_default, amount_source
         )
         VALUES (
             ${key},
@@ -267,7 +324,8 @@ export async function insertSpecialServiceMovementType(
             ${data.includes_movement},
             ${data.movement_type},
             ${sortOrder},
-            ${data.is_default ?? true}
+            ${data.is_default ?? true},
+            ${data.amount_source ?? "total"}
         )
         RETURNING
             key,
@@ -276,6 +334,7 @@ export async function insertSpecialServiceMovementType(
             movement_type,
             sort_order,
             is_default,
+            amount_source,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceMovementTypeRow[];
@@ -294,6 +353,7 @@ export async function updateSpecialServiceMovementType(
             includes_movement = ${data.includes_movement},
             movement_type = ${data.movement_type},
             is_default = COALESCE(${data.is_default ?? null}::boolean, is_default),
+            amount_source = COALESCE(${data.amount_source ?? null}::varchar, amount_source),
             updated_at = NOW()
         WHERE key = ${key}
         RETURNING
@@ -303,6 +363,7 @@ export async function updateSpecialServiceMovementType(
             movement_type,
             sort_order,
             is_default,
+            amount_source,
             created_at::text AS created_at,
             updated_at::text AS updated_at
     `) as SpecialServiceMovementTypeRow[];
@@ -342,6 +403,7 @@ export type SpecialServiceRecordMovementRow = {
     date: string;
     mode: MovementMode;
     movement_id: string | null;
+    debt_id: string | null;
     movement_anulado: boolean | null;
     created_at: string;
     updated_at: string;
@@ -365,6 +427,7 @@ export async function getSpecialServiceRecordMovements(
             m.date::text AS date,
             m.mode,
             m.movement_id,
+            m.debt_id,
             pc.anulado AS movement_anulado,
             m.created_at::text AS created_at,
             m.updated_at::text AS updated_at
@@ -392,6 +455,7 @@ async function getSpecialServiceRecordMovementById(
             m.date::text AS date,
             m.mode,
             m.movement_id,
+            m.debt_id,
             pc.anulado AS movement_anulado,
             m.created_at::text AS created_at,
             m.updated_at::text AS updated_at
@@ -423,6 +487,7 @@ export async function insertSpecialServiceRecordMovement(
     const recordRows = (await sql`
         SELECT
             sr.id,
+            sr.member_id,
             ss.name AS service_name,
             m.nombre AS member_nombre,
             p.nombre AS person_nombre
@@ -434,6 +499,7 @@ export async function insertSpecialServiceRecordMovement(
         LIMIT 1
     `) as {
         id: string;
+        member_id: string | null;
         service_name: string | null;
         member_nombre: string | null;
         person_nombre: string | null;
@@ -476,12 +542,38 @@ export async function insertSpecialServiceRecordMovement(
     }
     const movementTypeValue: MovementDirection =
         data.movement_type ?? movementType?.movement_type ?? "ingreso";
-    const includesMovement =
-        data.includes_movement ?? movementType?.includes_movement ?? true;
     const amount = Number.isFinite(data.amount) ? data.amount : 0;
-    const mode: MovementMode = data.mode === "transferencia" ? "transferencia" : "efectivo";
+    const mode = parseMovementMode(data.mode);
+    const payWithAccount = mode === "cuenta_corriente";
+    if (payWithAccount) {
+        if (!record.member_id) {
+            throw new Error("Sólo un socio puede pagar con su cuenta corriente");
+        }
+        if (movementTypeValue !== "ingreso") {
+            throw new Error("Con la cuenta corriente sólo se pueden registrar pagos");
+        }
+        if (amount <= 0) {
+            throw new Error("El monto debe ser mayor a cero");
+        }
+    }
+    // Pagado con la cuenta corriente: no entra dinero a caja, se descuenta de la cuenta del socio.
+    const includesMovement = payWithAccount
+        ? false
+        : data.includes_movement ?? movementType?.includes_movement ?? true;
 
     const detail = record.service_name ? `${label} - ${record.service_name}` : label;
+    let debtId: string | null = null;
+    if (payWithAccount) {
+        debtId = await insertDebt({
+            member_id: record.member_id,
+            person_id: null,
+            type: "servicio",
+            description: detail,
+            amount: -amount,
+            movement_id: null,
+            date: data.date,
+        });
+    }
     let movementId: string | null = null;
     if (includesMovement) {
         movementId = await insertMovement({
@@ -489,7 +581,7 @@ export async function insertSpecialServiceRecordMovement(
             detail,
             amount,
             type: movementTypeValue,
-            mode,
+            mode: mode === "transferencia" ? "transferencia" : "efectivo",
             concept: null,
         });
     }
@@ -506,7 +598,8 @@ export async function insertSpecialServiceRecordMovement(
             amount,
             date,
             mode,
-            movement_id
+            movement_id,
+            debt_id
         )
         VALUES (
             ${id},
@@ -518,7 +611,8 @@ export async function insertSpecialServiceRecordMovement(
             ${amount},
             ${data.date},
             ${mode},
-            ${movementId}
+            ${movementId},
+            ${debtId}
         )
     `;
 
@@ -545,3 +639,8 @@ export async function deleteSpecialServiceRecordMovement(id: string): Promise<vo
     const sql = getSql();
     await sql`DELETE FROM special_service_record_movements WHERE id = ${id}`;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureSpecialServiceMovementTypesTable = runOnce(ensureSpecialServiceMovementTypesTableTask);
+export const ensureSpecialServiceRecordMovementsTable = runOnce(ensureSpecialServiceRecordMovementsTableTask);
+export const migrateSpecialServiceMovementTypesSchema = runOnce(migrateSpecialServiceMovementTypesSchemaTask);

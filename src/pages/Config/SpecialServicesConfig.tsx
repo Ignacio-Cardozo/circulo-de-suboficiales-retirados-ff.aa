@@ -37,6 +37,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
     const [memberPrice, setMemberPrice] = useState("");
     const [personPrice, setPersonPrice] = useState("");
     const [depositCost, setDepositCost] = useState("");
+    const [insuranceCost, setInsuranceCost] = useState("");
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [editId, setEditId] = useState<string | null>(null);
@@ -81,6 +82,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
         setMemberPrice("");
         setPersonPrice("");
         setDepositCost("");
+        setInsuranceCost("");
         setEditId(null);
         setAddons([]);
         setAddonError(null);
@@ -109,6 +111,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                 member_price: parseMoney(memberPrice),
                 person_price: parseMoney(personPrice),
                 deposit_cost: parseMoney(depositCost),
+                insurance_cost: parseMoney(insuranceCost),
             };
             let saved: SpecialServiceItem;
             if (editId) {
@@ -147,6 +150,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
         setMemberPrice(formatNumberInput(svc.member_price));
         setPersonPrice(formatNumberInput(svc.person_price));
         setDepositCost(formatNumberInput(svc.deposit_cost));
+        setInsuranceCost(formatNumberInput(svc.insurance_cost ?? 0));
         setEditId(svc.id);
         setAddons([]);
         setAddonError(null);
@@ -305,6 +309,17 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                         className="config-input"
                         value={depositCost}
                         onChange={(e) => setDepositCost(e.target.value)}
+                        placeholder="0.00"
+                    />
+                </div>
+                <div className="config-field">
+                    <label>Costo del seguro</label>
+                    <input
+                        autoComplete="off"
+                        type="text"
+                        className="config-input"
+                        value={insuranceCost}
+                        onChange={(e) => setInsuranceCost(e.target.value)}
                         placeholder="0.00"
                     />
                 </div>
@@ -468,6 +483,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                                     <th className="num">Precio socio</th>
                                     <th className="num">Precio persona</th>
                                     <th className="num">Costo seña</th>
+                                    <th className="num">Costo seguro</th>
                                     <th className="center">Añadidos</th>
                                     <th className="center">Estados</th>
                                     <th className="center">Movimientos</th>
@@ -487,6 +503,9 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                                         </td>
                                         <td className="num">
                                             $ {svc.deposit_cost.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="num">
+                                            $ {(svc.insurance_cost ?? 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                                         </td>
                                         <td className="center">
                                             <button
@@ -548,7 +567,7 @@ const SpecialServicesConfig: React.FC<SpecialServicesConfigProps> = ({ initialSe
                                 ))}
                                 {filteredServices.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="svc-list-empty">
+                                        <td colSpan={10} className="svc-list-empty">
                                             No se encontraron servicios
                                         </td>
                                     </tr>

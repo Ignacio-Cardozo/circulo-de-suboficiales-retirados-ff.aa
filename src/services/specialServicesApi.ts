@@ -7,6 +7,7 @@ export type SpecialServiceItem = {
     member_price: number;
     person_price: number;
     deposit_cost: number;
+    insurance_cost: number;
     /** Usa su propia lista de estados en lugar de la lista base. */
     custom_statuses: boolean;
     /** Usa su propia lista de movimientos en lugar de la lista base. */
@@ -21,6 +22,7 @@ export type SpecialServiceInput = {
     member_price?: number;
     person_price?: number;
     deposit_cost?: number;
+    insurance_cost?: number;
 };
 
 export async function fetchSpecialServices(): Promise<SpecialServiceItem[]> {

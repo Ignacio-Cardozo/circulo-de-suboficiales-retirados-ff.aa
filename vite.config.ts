@@ -922,6 +922,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 member_price: body.member_price ?? 0,
                 person_price: body.person_price ?? 0,
                 deposit_cost: body.deposit_cost ?? 0,
+                insurance_cost: body.insurance_cost ?? 0,
               });
               res.statusCode = 201;
               res.end(JSON.stringify(result));
@@ -941,6 +942,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 member_price: body.member_price ?? 0,
                 person_price: body.person_price ?? 0,
                 deposit_cost: body.deposit_cost ?? 0,
+                insurance_cost: body.insurance_cost ?? 0,
               });
               if (!result) {
                 res.statusCode = 404;
@@ -1189,6 +1191,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
               insertSpecialServiceMovementType,
               updateSpecialServiceMovementType,
               deleteSpecialServiceMovementType,
+              parseMovementAmountSource,
             } = await import("./src/database/specialServiceMovementTypesRepository");
 
             if (req.method === "GET") {
@@ -1210,6 +1213,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 includes_movement: body.includes_movement !== false,
                 movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
                 is_default: typeof body.is_default === "boolean" ? body.is_default : undefined,
+                amount_source: parseMovementAmountSource(body.amount_source),
               });
               res.statusCode = 201;
               res.end(JSON.stringify(result));
@@ -1228,6 +1232,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                 includes_movement: body.includes_movement !== false,
                 movement_type: body.movement_type === "egreso" ? "egreso" : "ingreso",
                 is_default: typeof body.is_default === "boolean" ? body.is_default : undefined,
+                amount_source: parseMovementAmountSource(body.amount_source),
               });
               if (!result) {
                 res.statusCode = 404;
@@ -1348,6 +1353,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
               getSpecialServiceRecordMovements,
               insertSpecialServiceRecordMovement,
               deleteSpecialServiceRecordMovement,
+              parseMovementMode,
             } = await import("./src/database/specialServiceMovementTypesRepository");
 
             if (req.method === "GET") {
@@ -1412,7 +1418,7 @@ function apiDevPlugin(env: Record<string, string>): Plugin {
                       : undefined,
                   amount: Number(body.amount) || 0,
                   date: body.date,
-                  mode: body.mode === "transferencia" ? "transferencia" : "efectivo",
+                  mode: parseMovementMode(body.mode),
                 });
                 res.statusCode = 201;
                 res.end(JSON.stringify(result));

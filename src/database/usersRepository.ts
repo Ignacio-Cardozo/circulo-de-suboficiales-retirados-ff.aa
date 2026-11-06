@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type AppUserRow = {
     id: string;
@@ -11,7 +12,7 @@ export type AppUserRow = {
     updated_at: string;
 };
 
-export async function ensureAppUsersTable(): Promise<void> {
+async function ensureAppUsersTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS app_users (
@@ -87,3 +88,6 @@ export async function deleteAppUser(authUserId: string): Promise<void> {
     const sql = getSql();
     await sql`DELETE FROM app_users WHERE auth_user_id = ${authUserId}`;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureAppUsersTable = runOnce(ensureAppUsersTableTask);

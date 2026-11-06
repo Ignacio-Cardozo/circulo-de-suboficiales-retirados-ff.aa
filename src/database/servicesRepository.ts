@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type ServiceRow = {
     id: string;
@@ -9,7 +10,7 @@ export type ServiceRow = {
     updated_at: string;
 };
 
-export async function ensureServicesTable(): Promise<void> {
+async function ensureServicesTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS services (
@@ -59,3 +60,6 @@ export async function deleteService(id: string): Promise<void> {
     const sql = getSql();
     await sql`DELETE FROM services WHERE id = ${id}`;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureServicesTable = runOnce(ensureServicesTableTask);

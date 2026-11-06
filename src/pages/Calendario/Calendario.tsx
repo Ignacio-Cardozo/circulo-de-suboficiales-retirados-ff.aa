@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Briefcase,
   Calendar,
@@ -75,7 +74,6 @@ function getTitular(event: CalendarEvent): string {
 }
 
 const Calendario: React.FC = () => {
-  const navigate = useNavigate();
   const today = todayLocal();
   const now = parseIso(today);
 
@@ -426,11 +424,6 @@ const Calendario: React.FC = () => {
           onClose={() => setSelectedRecord(null)}
           onUpdated={handleUpdated}
           onCancelled={handleCancelled}
-          onNavigateToMovement={(movementId) => navigate(`/tesoreria/movimientos/detalle/${movementId}`)}
-          onNavigateToTitular={(memberId, personId) => {
-            if (memberId) navigate(`/socios/detalle/${memberId}`);
-            else if (personId) navigate(`/terceros/detalle/${personId}`);
-          }}
         />
       )}
     </div>

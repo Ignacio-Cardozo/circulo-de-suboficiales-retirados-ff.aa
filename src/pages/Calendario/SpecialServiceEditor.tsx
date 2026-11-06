@@ -63,6 +63,9 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
     const [depositCost, setDepositCost] = useState(
         mode === "edit" && service ? formatNumberInput(service.deposit_cost) : ""
     );
+    const [insuranceCost, setInsuranceCost] = useState(
+        mode === "edit" && service ? formatNumberInput(service.insurance_cost ?? 0) : ""
+    );
 
     const [existingAddons, setExistingAddons] = useState<SpecialServiceAddonItem[]>([]);
     const [removedAddonIds, setRemovedAddonIds] = useState<string[]>([]);
@@ -167,6 +170,7 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
                 member_price: parseMoney(memberPrice),
                 person_price: parseMoney(personPrice),
                 deposit_cost: parseMoney(depositCost),
+                insurance_cost: parseMoney(insuranceCost),
             };
 
             let savedService: SpecialServiceItem;
@@ -298,12 +302,21 @@ const SpecialServiceEditor: React.FC<SpecialServiceEditorProps> = ({
                     </div>
                 </div>
 
-                <div className="ss-field">
-                    <label>Costo de la seña</label>
-                    <MoneyInput
-                        value={depositCost}
-                        onValueChange={setDepositCost}
-                    />
+                <div className="ss-row">
+                    <div className="ss-field">
+                        <label>Costo de la seña</label>
+                        <MoneyInput
+                            value={depositCost}
+                            onValueChange={setDepositCost}
+                        />
+                    </div>
+                    <div className="ss-field">
+                        <label>Costo del seguro</label>
+                        <MoneyInput
+                            value={insuranceCost}
+                            onValueChange={setInsuranceCost}
+                        />
+                    </div>
                 </div>
 
                 <div className="ss-editor-section">

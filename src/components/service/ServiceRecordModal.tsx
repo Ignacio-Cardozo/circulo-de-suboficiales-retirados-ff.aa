@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Calendar, Briefcase, User, DollarSign, FileText, ExternalLink } from "lucide-react";
 import { formatRecordDate, toCurrency } from "../../utils/format";
 import Modal from "../ui/Modal";
@@ -22,8 +23,21 @@ interface ServiceRecordLink {
 interface ServiceRecordModalProps {
   record: ServiceRecordLink | null;
   onClose: () => void;
-  onNavigateToMovement?: (movementId: string) => void;
-  onNavigateToTitular?: (memberId: string | null, personId: string | null) => void;
+  /** Muestra el acceso al movimiento vinculado. */
+  showMovementLink?: boolean;
+  /** Muestra el acceso al perfil del titular. */
+  showTitularLink?: boolean;
+}
+
+/** Click izquierdo sin teclas modificadoras: navegación normal dentro de la misma pestaña. */
+function isPlainLeftClick(e: React.MouseEvent): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
+
+function getTitularHref(r: ServiceRecordLink): string | null {
+  if (r.member_id) return `/socios/detalle/${r.member_id}`;
+  if (r.person_id) return `/terceros/detalle/${r.person_id}`;
+  return null;
 }
 
 function getTitular(r: ServiceRecordLink): string {
@@ -36,10 +50,15 @@ function getTitular(r: ServiceRecordLink): string {
 const ServiceRecordModal: React.FC<ServiceRecordModalProps> = ({
   record,
   onClose,
-  onNavigateToMovement,
-  onNavigateToTitular,
+  showMovementLink = false,
+  showTitularLink = false,
 }) => {
   if (!record) return null;
+  const titularHref = showTitularLink ? getTitularHref(record) : null;
+  // Cerrar el modal sólo si se navega en esta pestaña (no con la rueda o Ctrl+click).
+  const closeOnPlainClick = (e: React.MouseEvent) => {
+    if (isPlainLeftClick(e)) onClose();
+  };
 
   return (
     <Modal isOpen={!!record} onClose={onClose} title="Detalle del Registro de Servicio">
@@ -66,17 +85,15 @@ const ServiceRecordModal: React.FC<ServiceRecordModalProps> = ({
               <span className="service-modal-label">Titular</span>
               <span className="service-modal-value" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {getTitular(record)}
-                {(record.member_id || record.person_id) && onNavigateToTitular && (
-                  <button
+                {titularHref && (
+                  <Link
+                    to={titularHref}
                     className="service-modal-link-btn"
-                    style={{ padding: "4px 10px", fontSize: 12 }}
-                    onClick={() => {
-                      onClose();
-                      onNavigateToTitular(record.member_id ?? null, record.person_id ?? null);
-                    }}
+                    style={{ padding: "4px 10px", fontSize: 12, textDecoration: "none" }}
+                    onClick={closeOnPlainClick}
                   >
                     Ver perfil <ExternalLink size={12} />
-                  </button>
+                  </Link>
                 )}
               </span>
             </div>
@@ -117,17 +134,16 @@ const ServiceRecordModal: React.FC<ServiceRecordModalProps> = ({
           )}
         </div>
 
-        {record.movement_id && onNavigateToMovement && (
+        {record.movement_id && showMovementLink && (
           <div className="service-modal-link">
-            <button
+            <Link
+              to={`/tesoreria/movimientos/detalle/${record.movement_id}`}
               className="service-modal-link-btn"
-              onClick={() => {
-                onClose();
-                onNavigateToMovement(record.movement_id!);
-              }}
+              style={{ textDecoration: "none" }}
+              onClick={closeOnPlainClick}
             >
               Ver movimiento vinculado <ExternalLink size={13} />
-            </button>
+            </Link>
           </div>
         )}
       </div>

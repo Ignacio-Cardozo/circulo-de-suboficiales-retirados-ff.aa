@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
 import { ensureSpecialServicesTable } from "./specialServicesRepository.js";
+import { runOnce } from "./runOnce.js";
 
 export type SpecialServiceAddonRow = {
     id: string;
@@ -17,7 +18,7 @@ export type SpecialServiceAddonInput = {
     cost?: number;
 };
 
-export async function ensureSpecialServiceAddonsTable(): Promise<void> {
+async function ensureSpecialServiceAddonsTableTask(): Promise<void> {
     const sql = getSql();
     await ensureSpecialServicesTable();
     await sql`
@@ -137,3 +138,6 @@ export async function deleteSpecialServiceAddon(id: string): Promise<void> {
     const sql = getSql();
     await sql`DELETE FROM special_service_addons WHERE id = ${id}`;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureSpecialServiceAddonsTable = runOnce(ensureSpecialServiceAddonsTableTask);

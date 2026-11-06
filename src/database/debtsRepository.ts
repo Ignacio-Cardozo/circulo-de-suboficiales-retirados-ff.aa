@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type DebtRow = {
     id: string;
@@ -19,7 +20,7 @@ export type DebtWithDetails = DebtRow & {
     person_nombre: string | null;
 };
 
-export async function migrateDebtsSchema(): Promise<void> {
+async function migrateDebtsSchemaTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS debts (
@@ -165,3 +166,6 @@ export async function reverseDebtsByMovementId(movementId: string): Promise<numb
     }
     return reversed;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const migrateDebtsSchema = runOnce(migrateDebtsSchemaTask);

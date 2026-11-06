@@ -1,4 +1,5 @@
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export interface ComprobanteRow {
     id: string;
@@ -11,7 +12,7 @@ export interface ComprobanteRow {
     created_at: string;
 }
 
-export async function ensureTable(): Promise<void> {
+async function ensureTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS comprobantes (
@@ -72,3 +73,6 @@ export async function getComprobantesByMovementIds(movementIds: string[]): Promi
     `;
     return rows as ComprobanteRow[];
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureTable = runOnce(ensureTableTask);

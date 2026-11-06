@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type PettyCashRow = {
     id: string;
@@ -13,7 +14,7 @@ export type PettyCashRow = {
     created_at: string;
 };
 
-export async function migratePettyCashSchema(): Promise<void> {
+async function migratePettyCashSchemaTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS petty_cash (
@@ -160,3 +161,6 @@ export async function insertMovementsBatch(
 
     return insertedCount;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const migratePettyCashSchema = runOnce(migratePettyCashSchemaTask);

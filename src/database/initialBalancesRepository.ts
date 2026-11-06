@@ -1,4 +1,5 @@
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 const SINGLETON_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -10,7 +11,7 @@ export type InitialBalances = {
     comprobante_egreso: number;
 };
 
-export async function ensureInitialBalancesTable(): Promise<void> {
+async function ensureInitialBalancesTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS initial_balances (
@@ -80,3 +81,6 @@ export async function getNextAndIncrementReceipt(
     await upsertInitialBalances(0, 0);
     return getNextAndIncrementReceipt(type);
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureInitialBalancesTable = runOnce(ensureInitialBalancesTableTask);

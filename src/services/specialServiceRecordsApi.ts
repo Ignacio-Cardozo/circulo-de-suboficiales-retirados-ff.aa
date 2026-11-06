@@ -22,6 +22,7 @@ export type SpecialServiceRecordItem = {
     member_price: number | null;
     person_price: number | null;
     deposit_cost: number | null;
+    insurance_cost: number | null;
     member_id: string | null;
     member_nombre: string | null;
     member_numero_de_socio: string | null;

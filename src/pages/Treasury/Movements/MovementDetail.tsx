@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Loader, Edit3, Trash2, X, Eye, FileText, Ban } from "lucide-react";
 import { fetchMovementById, setMovementAnulado, type Movement, type ServiceRecordLink, type CementerioMovimientoLink } from "../../../services/movementsApi";
 import { fetchMemberById } from "../../../services/membersApi";
@@ -18,6 +18,8 @@ import "./MovementDetail.css";
 const MovementDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    // "?comprobante=1": abre el comprobante directamente (p. ej. desde otra pestaña).
+    const [searchParams] = useSearchParams();
     const [movement, setMovement] = useState<Movement | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -26,7 +28,7 @@ const MovementDetail: React.FC = () => {
     const [paidMemberNames, setPaidMemberNames] = useState<{ id: string; nombre: string }[]>([]);
     const [selectedServiceRecord, setSelectedServiceRecord] = useState<ServiceRecordLink | null>(null);
     const [selectedSpecialServiceRecord, setSelectedSpecialServiceRecord] = useState<SpecialServiceRecordItem | null>(null);
-    const [showComprobante, setShowComprobante] = useState(false);
+    const [showComprobante, setShowComprobante] = useState(() => searchParams.get("comprobante") === "1");
     const [linkedDebt, setLinkedDebt] = useState<DebtWithDetails | null>(null);
     const [haberesMember, setHaberesMember] = useState<Member | null>(null);
     const [haberesBalance, setHaberesBalance] = useState<number | null>(null);
@@ -306,10 +308,7 @@ const MovementDetail: React.FC = () => {
             <ServiceRecordModal
                 record={selectedServiceRecord}
                 onClose={() => setSelectedServiceRecord(null)}
-                onNavigateToTitular={(memberId, personId) => {
-                    if (memberId) navigate(`/socios/detalle/${memberId}`);
-                    else if (personId) navigate(`/terceros/detalle/${personId}`);
-                }}
+                showTitularLink
             />
 
             {selectedSpecialServiceRecord && (
@@ -343,11 +342,6 @@ const MovementDetail: React.FC = () => {
                                   }
                                 : prev
                         );
-                    }}
-                    onNavigateToMovement={(movementId) => navigate(`/tesoreria/movimientos/detalle/${movementId}`)}
-                    onNavigateToTitular={(memberId, personId) => {
-                        if (memberId) navigate(`/socios/detalle/${memberId}`);
-                        else if (personId) navigate(`/terceros/detalle/${personId}`);
                     }}
                 />
             )}

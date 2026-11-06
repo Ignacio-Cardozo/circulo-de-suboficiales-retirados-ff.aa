@@ -4,9 +4,11 @@ import {
     saveSpecialServiceMovementType,
     updateSpecialServiceMovementType,
     deleteSpecialServiceMovementType,
+    type MovementAmountSource,
     type MovementDirection,
     type SpecialServiceMovementTypeItem,
 } from "../../services/specialServiceMovementTypesApi";
+import { AMOUNT_SOURCE_OPTIONS, getAmountSourceLabel } from "../../utils/specialServiceAmounts";
 import { useSpecialServiceMovementTypesStore } from "../../store/specialServiceMovementTypesStore";
 import { useSpecialServiceWorkflowStore } from "../../store/specialServiceWorkflowStore";
 
@@ -29,6 +31,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
     const [includesMovement, setIncludesMovement] = useState(true);
     const [movementType, setMovementType] = useState<MovementDirection>("ingreso");
     const [isDefault, setIsDefault] = useState(true);
+    const [amountSource, setAmountSource] = useState<MovementAmountSource>("total");
     const clearWorkflows = useSpecialServiceWorkflowStore((state) => state.clear);
     const [editKey, setEditKey] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -43,6 +46,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
         setIncludesMovement(true);
         setMovementType("ingreso");
         setIsDefault(true);
+        setAmountSource("total");
         setEditKey(null);
     };
 
@@ -58,6 +62,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                     includes_movement: includesMovement,
                     movement_type: movementType,
                     is_default: isDefault,
+                    amount_source: amountSource,
                 });
                 setMovementTypes(
                     sortMovementTypes(
@@ -70,6 +75,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                     includes_movement: includesMovement,
                     movement_type: movementType,
                     is_default: isDefault,
+                    amount_source: amountSource,
                 });
                 setMovementTypes(sortMovementTypes([...movementTypes, created]));
             }
@@ -87,6 +93,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
         setIncludesMovement(movement.includes_movement);
         setMovementType(movement.movement_type);
         setIsDefault(movement.is_default !== false);
+        setAmountSource(movement.amount_source ?? "total");
         setEditKey(movement.key);
         setError(null);
     };
@@ -128,6 +135,21 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                     >
                         <option value="ingreso">Ingreso</option>
                         <option value="egreso">Egreso</option>
+                    </select>
+                </div>
+                <div className="config-field">
+                    <label>Monto sugerido</label>
+                    <select
+                        className="config-input"
+                        value={amountSource}
+                        onChange={(e) => setAmountSource(e.target.value as MovementAmountSource)}
+                        title={AMOUNT_SOURCE_OPTIONS.find((option) => option.value === amountSource)?.hint}
+                    >
+                        {AMOUNT_SOURCE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
                     </select>
                 </div>
                 <div className="config-field">
@@ -188,6 +210,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                         <tr>
                             <th>Movimiento</th>
                             <th>Tipo</th>
+                            <th>Monto sugerido</th>
                             <th>Incluye movimiento</th>
                             <th>Lista base</th>
                             <th className="actions">Acciones</th>
@@ -209,6 +232,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                                             : "Egreso"}
                                     </span>
                                 </td>
+                                <td>{getAmountSourceLabel(movement.amount_source)}</td>
                                 <td>{movement.includes_movement ? "Sí" : "No"}</td>
                                 <td>
                                     <span
@@ -256,7 +280,7 @@ const SpecialServiceMovementTypesConfig: React.FC = () => {
                         ))}
                         {movementTypes.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="svc-list-empty">
+                                <td colSpan={6} className="svc-list-empty">
                                     No hay movimientos configurados. Ejecutá npm run db:migrate para
                                     crear los movimientos por defecto.
                                 </td>

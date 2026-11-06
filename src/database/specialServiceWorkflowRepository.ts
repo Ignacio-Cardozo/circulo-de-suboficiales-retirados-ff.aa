@@ -112,7 +112,7 @@ async function getBaseMovementTypes(): Promise<SpecialServiceMovementTypeRow[]> 
     const sql = getSql();
     return (await sql`
         SELECT
-            key, label, includes_movement, movement_type, sort_order, is_default,
+            key, label, includes_movement, movement_type, sort_order, is_default, amount_source,
             created_at::text AS created_at,
             updated_at::text AS updated_at
         FROM special_service_movement_types
@@ -125,7 +125,7 @@ async function getAssignedMovementTypes(serviceId: string): Promise<SpecialServi
     const sql = getSql();
     return (await sql`
         SELECT
-            t.key, t.label, t.includes_movement, t.movement_type, t.sort_order, t.is_default,
+            t.key, t.label, t.includes_movement, t.movement_type, t.sort_order, t.is_default, t.amount_source,
             t.created_at::text AS created_at,
             t.updated_at::text AS updated_at
         FROM special_service_movement_type_assignments a

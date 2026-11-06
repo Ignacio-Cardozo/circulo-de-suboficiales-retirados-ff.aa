@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type SpecialServiceRow = {
     id: string;
@@ -8,6 +9,8 @@ export type SpecialServiceRow = {
     member_price: number;
     person_price: number;
     deposit_cost: number;
+    /** Costo del seguro (monto sugerido para el pago y la devolución del seguro). */
+    insurance_cost: number;
     /** true: usa su propia lista de estados (special_service_status_assignments). false: usa la lista base. */
     custom_statuses: boolean;
     /** true: usa su propia lista de movimientos (special_service_movement_type_assignments). false: usa la lista base. */
@@ -22,9 +25,10 @@ export type SpecialServiceInput = {
     member_price?: number;
     person_price?: number;
     deposit_cost?: number;
+    insurance_cost?: number;
 };
 
-export async function ensureSpecialServicesTable(): Promise<void> {
+async function ensureSpecialServicesTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS special_services (
@@ -38,6 +42,7 @@ export async function ensureSpecialServicesTable(): Promise<void> {
             updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
         )
     `;
+    await sql`ALTER TABLE special_services ADD COLUMN IF NOT EXISTS insurance_cost NUMERIC(12,2) NOT NULL DEFAULT 0`;
     await sql`ALTER TABLE special_services ADD COLUMN IF NOT EXISTS custom_statuses BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE special_services ADD COLUMN IF NOT EXISTS custom_movement_types BOOLEAN NOT NULL DEFAULT FALSE`;
 }
@@ -53,6 +58,7 @@ export async function getAllSpecialServices(): Promise<SpecialServiceRow[]> {
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            insurance_cost::float AS insurance_cost,
             custom_statuses,
             custom_movement_types,
             created_at::text AS created_at,
@@ -74,6 +80,7 @@ export async function getSpecialServiceById(id: string): Promise<SpecialServiceR
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            insurance_cost::float AS insurance_cost,
             custom_statuses,
             custom_movement_types,
             created_at::text AS created_at,
@@ -90,14 +97,15 @@ export async function insertSpecialService(data: SpecialServiceInput): Promise<S
     const sql = getSql();
     const id = randomUUID();
     const rows = (await sql`
-        INSERT INTO special_services (id, name, detail, member_price, person_price, deposit_cost)
+        INSERT INTO special_services (id, name, detail, member_price, person_price, deposit_cost, insurance_cost)
         VALUES (
             ${id},
             ${data.name},
             ${data.detail ?? null},
             ${data.member_price ?? 0},
             ${data.person_price ?? 0},
-            ${data.deposit_cost ?? 0}
+            ${data.deposit_cost ?? 0},
+            ${data.insurance_cost ?? 0}
         )
         RETURNING
             id,
@@ -106,6 +114,7 @@ export async function insertSpecialService(data: SpecialServiceInput): Promise<S
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            insurance_cost::float AS insurance_cost,
             custom_statuses,
             custom_movement_types,
             created_at::text AS created_at,
@@ -124,6 +133,7 @@ export async function updateSpecialService(id: string, data: SpecialServiceInput
             member_price = ${data.member_price ?? 0},
             person_price = ${data.person_price ?? 0},
             deposit_cost = ${data.deposit_cost ?? 0},
+            insurance_cost = ${data.insurance_cost ?? 0},
             updated_at = NOW()
         WHERE id = ${id}
         RETURNING
@@ -133,6 +143,7 @@ export async function updateSpecialService(id: string, data: SpecialServiceInput
             member_price::float AS member_price,
             person_price::float AS person_price,
             deposit_cost::float AS deposit_cost,
+            insurance_cost::float AS insurance_cost,
             custom_statuses,
             custom_movement_types,
             created_at::text AS created_at,
@@ -146,3 +157,6 @@ export async function deleteSpecialService(id: string): Promise<void> {
     const sql = getSql();
     await sql`DELETE FROM special_services WHERE id = ${id}`;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureSpecialServicesTable = runOnce(ensureSpecialServicesTableTask);

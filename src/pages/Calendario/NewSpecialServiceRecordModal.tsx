@@ -7,6 +7,9 @@ import PersonSearch from "../../components/person/PersonSearch";
 import SpecialServiceEditor, {
     type SpecialServiceEditorMode,
 } from "./SpecialServiceEditor";
+import SpecialServicePersonEditor, {
+    type PersonEditorMode,
+} from "./SpecialServicePersonEditor";
 import { fetchMembers } from "../../services/membersApi";
 import { fetchAllPersons } from "../../services/personsApi";
 import {
@@ -70,6 +73,12 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
     const [editorOpen, setEditorOpen] = useState(false);
     const [editorMode, setEditorMode] = useState<SpecialServiceEditorMode>("create");
     const [editorService, setEditorService] = useState<SpecialServiceItem | null>(null);
+
+    // Panel lateral de persona (alta o edición del tercero titular).
+    const [personEditorOpen, setPersonEditorOpen] = useState(false);
+    const [personEditorMode, setPersonEditorMode] = useState<PersonEditorMode>("create");
+    const [personEditorPerson, setPersonEditorPerson] = useState<Person | null>(null);
+    const anyPanelOpen = editorOpen || personEditorOpen;
 
     useEffect(() => {
         if (!isOpen) return;
@@ -236,10 +245,12 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
 
     const handleCloseModal = () => {
         setEditorOpen(false);
+        setPersonEditorOpen(false);
         onClose();
     };
 
     const openCreateEditor = () => {
+        setPersonEditorOpen(false);
         setEditorMode("create");
         setEditorService(null);
         setEditorOpen(true);
@@ -247,9 +258,41 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
 
     const openEditEditor = () => {
         if (!selectedService) return;
+        setPersonEditorOpen(false);
         setEditorMode("edit");
         setEditorService(selectedService);
         setEditorOpen(true);
+    };
+
+    const openCreatePersonEditor = () => {
+        setEditorOpen(false);
+        setPersonEditorMode("create");
+        setPersonEditorPerson(null);
+        setPersonEditorOpen(true);
+    };
+
+    const openEditPersonEditor = () => {
+        if (!selectedPerson) return;
+        setEditorOpen(false);
+        setPersonEditorMode("edit");
+        setPersonEditorPerson(selectedPerson);
+        setPersonEditorOpen(true);
+    };
+
+    // La persona guardada se agrega (o actualiza) en la lista y queda como titular.
+    const handlePersonSaved = (savedPerson: Person) => {
+        setPersons((prev) => {
+            const exists = prev.some((item) => item.id === savedPerson.id);
+            const next = exists
+                ? prev.map((item) => (item.id === savedPerson.id ? savedPerson : item))
+                : [...prev, savedPerson];
+            return [...next].sort((a, b) => a.nombre.localeCompare(b.nombre));
+        });
+        if (titularType !== "person") setAmountTouched(false);
+        setTitularType("person");
+        setSelectedPerson(savedPerson);
+        setPersonSearch(savedPerson.nombre);
+        setShowPersonDropdown(false);
     };
 
     const handleEditorSaved = (savedService: SpecialServiceItem, isNew: boolean) => {
@@ -331,7 +374,7 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
             isOpen={isOpen}
             onClose={handleCloseModal}
             title="Agendar un servicio"
-            maxWidth={editorOpen ? 1180 : 820}
+            maxWidth={anyPanelOpen ? 1180 : 820}
             contentClassName="ss-modal"
             closeOnOverlayClick={false}
         >
@@ -341,7 +384,7 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                         <Loader size={18} className="spin" /> Cargando datos...
                     </div>
                 ) : (
-                    <div className={`ss-columns${editorOpen ? " has-editor" : ""}`}>
+                    <div className={`ss-columns${anyPanelOpen ? " has-editor" : ""}`}>
                         <form className="ss-form" onSubmit={handleSubmit}>
                         <div className="ss-field">
                             <label>Servicio especial *</label>
@@ -478,18 +521,39 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                         {titularType === "person" && (
                             <div className="ss-field">
                                 <label>Persona *</label>
-                                <PersonSearch
-                                    type="persona"
-                                    searchValue={personSearch}
-                                    onSearchChange={setPersonSearch}
-                                    results={personResults}
-                                    selected={selectedPerson}
-                                    onSelect={handleSelectPerson}
-                                    onClear={handleClearPerson}
-                                    showDropdown={showPersonDropdown}
-                                    onShowDropdown={setShowPersonDropdown}
-                                    loading={loading}
-                                />
+                                <div className="ss-service-select-row ss-person-select-row">
+                                    <div className="ss-person-search">
+                                        <PersonSearch
+                                            type="persona"
+                                            searchValue={personSearch}
+                                            onSearchChange={setPersonSearch}
+                                            results={personResults}
+                                            selected={selectedPerson}
+                                            onSelect={handleSelectPerson}
+                                            onClear={handleClearPerson}
+                                            showDropdown={showPersonDropdown}
+                                            onShowDropdown={setShowPersonDropdown}
+                                            loading={loading}
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="ss-icon-btn ss-edit-btn"
+                                        onClick={openEditPersonEditor}
+                                        disabled={!selectedPerson}
+                                        title="Editar persona"
+                                    >
+                                        <Pencil size={16} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="ss-icon-btn ss-add-btn"
+                                        onClick={openCreatePersonEditor}
+                                        title="Registrar nueva persona"
+                                    >
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
                             </div>
                         )}
 
@@ -505,7 +569,7 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                                 />
                                 {selectedService && (
                                     <span className="ss-hint">
-                                        {`Precio socio: $ ${formatNumberInput(selectedService.member_price)} · Precio persona: $ ${formatNumberInput(selectedService.person_price)} · Seña: $ ${formatNumberInput(selectedService.deposit_cost)}`}
+                                        {`Precio socio: $ ${formatNumberInput(selectedService.member_price)} · Precio persona: $ ${formatNumberInput(selectedService.person_price)} · Seña: $ ${formatNumberInput(selectedService.deposit_cost)} · Seguro: $ ${formatNumberInput(selectedService.insurance_cost ?? 0)}`}
                                     </span>
                                 )}
                             </div>
@@ -553,6 +617,16 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                                 service={editorService}
                                 onClose={() => setEditorOpen(false)}
                                 onSaved={handleEditorSaved}
+                            />
+                        )}
+                        {personEditorOpen && (
+                            <SpecialServicePersonEditor
+                                key={`${personEditorMode}-${personEditorPerson?.id ?? "new"}`}
+                                mode={personEditorMode}
+                                person={personEditorPerson}
+                                persons={persons}
+                                onClose={() => setPersonEditorOpen(false)}
+                                onSaved={handlePersonSaved}
                             />
                         )}
                     </div>

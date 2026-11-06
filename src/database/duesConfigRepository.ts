@@ -1,4 +1,5 @@
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 type PricingRow = {
     id: string;
@@ -40,7 +41,7 @@ export type DuesConfig = {
     updated_at: string;
 };
 
-export async function ensurePricingTable(): Promise<void> {
+async function ensurePricingTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS pricing (
@@ -209,3 +210,6 @@ export async function getPricingHistory(): Promise<DuesConfig[]> {
     `) as PricingRow[];
     return rows.map(mapRow);
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensurePricingTable = runOnce(ensurePricingTableTask);

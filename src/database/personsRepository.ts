@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Person } from "../models/members.js";
 import { getSql } from "./connection.js";
 import type { PersonRow } from "./types.js";
+import { runOnce } from "./runOnce.js";
 
 export async function upsertPerson(person: Person): Promise<string | null> {
     if (!person.nombre?.trim()) return null;
@@ -98,7 +99,7 @@ export async function deletePersonById(id: string): Promise<void> {
     await sql`DELETE FROM persons WHERE id = ${id}`;
 }
 
-export async function migratePersonsSchema(): Promise<void> {
+async function migratePersonsSchemaTask(): Promise<void> {
     const sql = getSql();
     await sql`ALTER TABLE persons ADD COLUMN IF NOT EXISTS brinda_servicios BOOLEAN NOT NULL DEFAULT FALSE`;
 }
@@ -139,3 +140,6 @@ export async function getMembersByPersonId(personId: string): Promise<PersonMemb
         nombre: row.nombre,
     }));
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const migratePersonsSchema = runOnce(migratePersonsSchemaTask);

@@ -1,4 +1,5 @@
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type SpecialServiceStatusRow = {
     key: string;
@@ -101,7 +102,7 @@ export const DEFAULT_SPECIAL_SERVICE_STATUSES: Array<
     },
 ];
 
-export async function ensureSpecialServiceStatusesTable(): Promise<void> {
+async function ensureSpecialServiceStatusesTableTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS special_service_statuses (
@@ -195,7 +196,7 @@ export async function ensureCanceledSpecialServiceStatus(): Promise<void> {
     `;
 }
 
-export async function migrateSpecialServiceStatusesSchema(): Promise<void> {
+async function migrateSpecialServiceStatusesSchemaTask(): Promise<void> {
     await ensureSpecialServiceStatusesTable();
     const sql = getSql();
     const rows = (await sql`
@@ -423,3 +424,7 @@ export async function reorderSpecialServiceStatus(
     }
     return getAllSpecialServiceStatuses();
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureSpecialServiceStatusesTable = runOnce(ensureSpecialServiceStatusesTableTask);
+export const migrateSpecialServiceStatusesSchema = runOnce(migrateSpecialServiceStatusesSchemaTask);

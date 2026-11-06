@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
     Calendar,
     Check,
+    ChevronDown,
     CircleHelp,
     DollarSign,
     ExternalLink,
@@ -39,6 +41,8 @@ import {
 } from "../../services/specialServiceRecordMovementsApi";
 import type { SpecialServiceMovementTypeItem } from "../../services/specialServiceMovementTypesApi";
 import { fetchMembers } from "../../services/membersApi";
+import { fetchBalanceByMember } from "../../services/debtsApi";
+import { invalidateMembersDebtStatus } from "../../services/membersDebtApi";
 import { fetchAllPersons } from "../../services/personsApi";
 import { useSpecialServiceStatusesStore } from "../../store/specialServiceStatusesStore";
 import { useSpecialServiceMovementTypesStore } from "../../store/specialServiceMovementTypesStore";
@@ -51,6 +55,7 @@ import {
     todayLocal,
 } from "../../utils/format";
 import type { Member, Person } from "../../models/members";
+import { getSuggestedMovementAmount } from "../../utils/specialServiceAmounts";
 import SpecialServiceStatusBadge from "./SpecialServiceStatusBadge";
 import SpecialServiceStatusSteps from "./SpecialServiceStatusSteps";
 
@@ -70,8 +75,6 @@ interface SpecialServiceRecordDetailModalProps {
     onClose: () => void;
     onUpdated: (record: SpecialServiceRecordItem) => void;
     onCancelled: (record: SpecialServiceRecordItem) => void;
-    onNavigateToMovement?: (movementId: string) => void;
-    onNavigateToTitular?: (memberId: string | null, personId: string | null) => void;
 }
 
 type MovementDraft = {
@@ -92,6 +95,29 @@ function getTitular(record: SpecialServiceRecordItem): string {
     return record.person_nombre ?? "Sin titular";
 }
 
+const OTHER_MOVEMENTS_KEY = "__otros__";
+
+const MODE_LABELS: Record<MovementMode, string> = {
+    efectivo: "Efectivo",
+    transferencia: "Transferencia",
+    cuenta_corriente: "Cuenta corriente",
+};
+
+/** Click izquierdo sin teclas modificadoras: navegación normal dentro de la misma pestaña. */
+function isPlainLeftClick(e: React.MouseEvent): boolean {
+    return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
+
+function getTitularHref(record: SpecialServiceRecordItem): string | null {
+    if (record.member_id) return `/socios/detalle/${record.member_id}`;
+    if (record.person_id) return `/terceros/detalle/${record.person_id}`;
+    return null;
+}
+
+function getMovementHref(movementId: string): string {
+    return `/tesoreria/movimientos/detalle/${movementId}`;
+}
+
 function toDateInputValue(value: string | null): string {
     if (!value) return "";
     const iso = value.split("T")[0];
@@ -103,8 +129,6 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
     onClose,
     onUpdated,
     onCancelled,
-    onNavigateToMovement,
-    onNavigateToTitular,
 }) => {
     const [status, setStatus] = useState(record.status);
     const [saving, setSaving] = useState(false);
@@ -122,6 +146,8 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
     const [movementSaving, setMovementSaving] = useState(false);
     const [movementFilter, setMovementFilter] = useState<"all" | "listos" | "pendientes">("all");
     const [comprobanteData, setComprobanteData] = useState<ComprobanteData | null>(null);
+    // Saldo de la cuenta corriente del socio titular (se carga al elegir pagar con ella).
+    const [accountBalance, setAccountBalance] = useState<{ memberId: string; value: number | null } | null>(null);
 
     const [editing, setEditing] = useState(false);
     const [optionsLoading, setOptionsLoading] = useState(false);
@@ -147,6 +173,26 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
         void loadStatuses();
         void loadMovementTypes();
     }, [loadStatuses, loadMovementTypes]);
+
+    const payingWithAccount = draft?.mode === "cuenta_corriente";
+    const accountMemberId = record.member_id;
+    useEffect(() => {
+        if (!payingWithAccount || !accountMemberId) return;
+        let mounted = true;
+        fetchBalanceByMember(accountMemberId)
+            .then((value) => {
+                if (mounted) setAccountBalance({ memberId: accountMemberId, value });
+            })
+            .catch(() => {
+                if (mounted) setAccountBalance({ memberId: accountMemberId, value: null });
+            });
+        return () => {
+            mounted = false;
+        };
+    }, [payingWithAccount, accountMemberId, movements]);
+    const titularHref = getTitularHref(record);
+    const currentAccountBalance =
+        accountBalance && accountBalance.memberId === accountMemberId ? accountBalance : null;
 
     useEffect(() => {
         let mounted = true;
@@ -238,14 +284,68 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
         return keys;
     }, [movements, completedMovementKeys]);
 
+    // Posición de cada tipo de movimiento según los pasos (estados) del servicio. Los tipos que
+    // no corresponden a ningún paso van después, según el orden de la lista de movimientos.
+    const movementStepRank = useMemo(() => {
+        const rank = new Map<string, number>();
+        stepStatuses.forEach((item, index) => {
+            if (item.movement_type_key && !rank.has(item.movement_type_key)) {
+                rank.set(item.movement_type_key, index);
+            }
+        });
+        availableMovementTypes.forEach((type, index) => {
+            if (!rank.has(type.key)) rank.set(type.key, stepStatuses.length + index);
+        });
+        return (key: string | null) => rank.get(key ?? "") ?? Number.MAX_SAFE_INTEGER;
+    }, [stepStatuses, availableMovementTypes]);
+
+    // Movimientos registrados en el orden de los pasos; dentro de un mismo tipo, por orden de registro.
+    const orderedMovements = useMemo(
+        () =>
+            [...movements].sort(
+                (a, b) =>
+                    movementStepRank(a.movement_type_key) - movementStepRank(b.movement_type_key) ||
+                    a.created_at.localeCompare(b.created_at)
+            ),
+        [movements, movementStepRank]
+    );
+
+    // Botones de movimientos disponibles, también en el orden de los pasos.
+    // Movimientos agrupados por tipo, para verlos desplegando cada tipo (uno abierto a la vez).
+    const movementsByType = useMemo(() => {
+        const groups = new Map<string, SpecialServiceRecordMovementItem[]>();
+        for (const movement of orderedMovements) {
+            if (!movement.movement_type_key) continue;
+            const list = groups.get(movement.movement_type_key) ?? [];
+            list.push(movement);
+            groups.set(movement.movement_type_key, list);
+        }
+        return groups;
+    }, [orderedMovements]);
+
+    // Movimientos sin tipo o de un tipo que ya no está en la lista del servicio.
+    const otherMovements = useMemo(() => {
+        const keys = new Set(availableMovementTypes.map((type) => type.key));
+        return orderedMovements.filter(
+            (movement) => !movement.movement_type_key || !keys.has(movement.movement_type_key)
+        );
+    }, [orderedMovements, availableMovementTypes]);
+
+    const [expandedMovementKey, setExpandedMovementKey] = useState<string | null>(null);
+    const toggleMovementGroup = (key: string) =>
+        setExpandedMovementKey((current) => (current === key ? null : key));
+
     const visibleMovementTypes = useMemo(() => {
-        if (movementFilter === "all") return availableMovementTypes;
-        return availableMovementTypes.filter((type) =>
+        const ordered = [...availableMovementTypes].sort(
+            (a, b) => movementStepRank(a.key) - movementStepRank(b.key)
+        );
+        if (movementFilter === "all") return ordered;
+        return ordered.filter((type) =>
             movementFilter === "listos"
                 ? completedMovementKeys.has(type.key)
                 : !completedMovementKeys.has(type.key)
         );
-    }, [availableMovementTypes, movementFilter, completedMovementKeys]);
+    }, [availableMovementTypes, movementStepRank, movementFilter, completedMovementKeys]);
 
     const selectedService = useMemo(
         () => services.find((service) => service.id === serviceId) ?? null,
@@ -418,20 +518,35 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
             );
             return;
         }
-        const suggested =
-            type.movement_type === "egreso" || type.key === "sena"
-                ? record.deposit_cost ?? record.amount
-                : record.amount;
+        // Monto según el paso: seña, saldo (total − seña), seguro, total o a mano.
+        const depositKeys = new Set(
+            [...movementTypes, ...availableMovementTypes]
+                .filter((item) => item.amount_source === "sena")
+                .map((item) => item.key)
+        );
+        const suggested = getSuggestedMovementAmount(
+            type.amount_source,
+            record,
+            movements,
+            depositKeys
+        );
+        // El estado avanza solo al paso que corresponde a este pago (nunca retrocede).
+        const currentIndex = stepStatuses.findIndex((item) => item.key === record.status);
+        const targetIndex = stepStatuses.findIndex(
+            (item) => item.includes_movement && item.movement_type_key === type.key
+        );
+        const statusToApply =
+            targetIndex !== -1 && targetIndex > currentIndex ? stepStatuses[targetIndex].key : null;
         setMovementError(null);
         setDraft({
             label: type.label,
             movementType: type.movement_type,
             includesMovement: type.includes_movement,
             movementTypeKey: type.key,
-            amount: formatNumberInput(suggested),
+            amount: suggested === null ? "" : formatNumberInput(suggested),
             date: todayLocal(),
             mode: "efectivo",
-            statusToApply: null,
+            statusToApply,
         });
     };
 
@@ -495,11 +610,72 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
         }
     };
 
+    const renderMovementItem = (movement: SpecialServiceRecordMovementItem) => (
+        <div
+            key={movement.id}
+            className={`ss-movement-item ${movement.movement_type}${
+                movement.movement_anulado ? " is-annulled" : ""
+            }`}
+        >
+            <div className="ss-movement-item-top">
+                <span className="ss-movement-item-label">{movement.label}</span>
+                <span className="ss-movement-item-amount">
+                    {movement.movement_type === "egreso" ? "−" : "+"}
+                    {toCurrency(movement.amount)}
+                </span>
+            </div>
+            <div className="ss-movement-item-meta">
+                <span>{formatRecordDate(movement.date)}</span>
+                <span>{MODE_LABELS[movement.mode] ?? movement.mode}</span>
+                {!movement.includes_movement && movement.mode !== "cuenta_corriente" && (
+                    <span className="ss-movement-tag">Sin caja</span>
+                )}
+                {movement.movement_anulado && (
+                    <span
+                        className="ss-movement-tag annulled"
+                        title="Este movimiento fue anulado. Podés registrarlo de nuevo."
+                    >
+                        <CircleHelp size={10} /> Anulado
+                    </span>
+                )}
+            </div>
+            {movement.movement_id && (
+                <div className="ss-movement-item-actions">
+                    <Link
+                        to={`${getMovementHref(movement.movement_id)}?comprobante=1`}
+                        className="ss-link-btn"
+                        onClick={(e) => {
+                            // Click normal: se muestra acá. Rueda / Ctrl+click: otra pestaña.
+                            if (!isPlainLeftClick(e)) return;
+                            e.preventDefault();
+                            void openComprobanteForMovement(movement);
+                        }}
+                    >
+                        Ver comprobante <FileText size={12} />
+                    </Link>
+                    <Link
+                        to={getMovementHref(movement.movement_id)}
+                        className="ss-link-btn"
+                        onClick={(e) => {
+                            if (isPlainLeftClick(e)) onClose();
+                        }}
+                    >
+                        Ver movimiento <ExternalLink size={12} />
+                    </Link>
+                </div>
+            )}
+        </div>
+    );
+
     const handleSubmitMovement = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!draft) return;
         if (!draft.date) {
             setMovementError("Indicá la fecha del movimiento.");
+            return;
+        }
+        if (draft.mode === "cuenta_corriente" && parseMoney(draft.amount) <= 0) {
+            setMovementError("El monto debe ser mayor a cero.");
             return;
         }
         setMovementSaving(true);
@@ -516,6 +692,8 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                 mode: draft.mode,
             });
             setMovements((prev) => [saved, ...prev]);
+            if (saved.movement_type_key) setExpandedMovementKey(saved.movement_type_key);
+            if (saved.debt_id) invalidateMembersDebtStatus();
             if (saved.comprobante) {
                 setComprobanteData(buildComprobanteData(saved, saved.comprobante));
             }
@@ -812,17 +990,25 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                         <span className="ss-detail-label">Titular</span>
                                         <span className="ss-detail-value ss-detail-value-row">
                                             {getTitular(record)}
-                                            {(record.member_id || record.person_id) && onNavigateToTitular && (
-                                                <button
-                                                    type="button"
+                                            {(record.member_id || record.person_id) && (
+                                                <span
+                                                    className={`ss-titular-badge ${
+                                                        record.member_id ? "is-member" : "is-person"
+                                                    }`}
+                                                >
+                                                    {record.member_id ? "Socio" : "No socio"}
+                                                </span>
+                                            )}
+                                            {titularHref && (
+                                                <Link
+                                                    to={titularHref}
                                                     className="ss-link-btn"
-                                                    onClick={() => {
-                                                        onClose();
-                                                        onNavigateToTitular(record.member_id, record.person_id);
+                                                    onClick={(e) => {
+                                                        if (isPlainLeftClick(e)) onClose();
                                                     }}
                                                 >
                                                     Ver perfil <ExternalLink size={12} />
-                                                </button>
+                                                </Link>
                                             )}
                                         </span>
                                     </div>
@@ -831,9 +1017,11 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                 {record.addons.length > 0 && (
                                     <div className="ss-detail-field">
                                         <span className="ss-detail-icon"><Package size={14} /></span>
-                                        <div>
-                                            <span className="ss-detail-label">Añadidos</span>
-                                            <ul className="ss-detail-addons">
+                                        <div className="ss-detail-grow">
+                                            <span className="ss-detail-label">
+                                                Añadidos ({record.addons.length})
+                                            </span>
+                                            <ul className="ss-detail-addons custom-scroll">
                                                 {record.addons.map((addon) => (
                                                     <li key={addon.id}>
                                                         <span>{addon.name}</span>
@@ -845,31 +1033,43 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                     </div>
                                 )}
 
-                                <div className="ss-detail-field">
-                                    <span className="ss-detail-icon"><Calendar size={14} /></span>
-                                    <div>
-                                        <span className="ss-detail-label">Fecha del registro</span>
-                                        <span className="ss-detail-value">{formatRecordDate(record.date)}</span>
+                                <div className="ss-detail-pair">
+                                    <div className="ss-detail-field">
+                                        <span className="ss-detail-icon"><Calendar size={14} /></span>
+                                        <div>
+                                            <span className="ss-detail-label">Fecha del registro</span>
+                                            <span className="ss-detail-value">{formatRecordDate(record.date)}</span>
+                                        </div>
                                     </div>
-                                </div>
-
-                                {record.service_date && (
                                     <div className="ss-detail-field">
                                         <span className="ss-detail-icon"><Calendar size={14} /></span>
                                         <div>
                                             <span className="ss-detail-label">Fecha del servicio</span>
-                                            <span className="ss-detail-value">{formatRecordDate(record.service_date)}</span>
+                                            <span className="ss-detail-value">
+                                                {record.service_date ? formatRecordDate(record.service_date) : "—"}
+                                            </span>
                                         </div>
                                     </div>
-                                )}
+                                </div>
 
-                                <div className="ss-detail-field">
-                                    <span className="ss-detail-icon"><DollarSign size={14} /></span>
-                                    <div>
-                                        <span className="ss-detail-label">Costo de la seña</span>
-                                        <span className="ss-detail-value">
-                                            {record.deposit_cost != null ? toCurrency(record.deposit_cost) : "—"}
-                                        </span>
+                                <div className="ss-detail-pair">
+                                    <div className="ss-detail-field">
+                                        <span className="ss-detail-icon"><DollarSign size={14} /></span>
+                                        <div>
+                                            <span className="ss-detail-label">Costo de la seña</span>
+                                            <span className="ss-detail-value">
+                                                {record.deposit_cost != null ? toCurrency(record.deposit_cost) : "—"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="ss-detail-field">
+                                        <span className="ss-detail-icon"><DollarSign size={14} /></span>
+                                        <div>
+                                            <span className="ss-detail-label">Costo del seguro</span>
+                                            <span className="ss-detail-value">
+                                                {record.insurance_cost != null ? toCurrency(record.insurance_cost) : "—"}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -968,50 +1168,118 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                     </div>
 
                     <div className="ss-movement-actions">
+                        {movementsLoading && (
+                            <div className="ss-loading">
+                                <Loader size={16} className="spin" /> Cargando...
+                            </div>
+                        )}
                         {visibleMovementTypes.map((type) => {
                             const isDone = completedMovementKeys.has(type.key);
                             const isAnnulled = !isDone && annulledMovementKeys.has(type.key);
                             const isPending =
                                 !isDone && !isAnnulled && pendingMovementKeys.has(type.key);
+                            const typeMovements = movementsByType.get(type.key) ?? [];
+                            const hasMovements = typeMovements.length > 0;
+                            const isExpanded = hasMovements && expandedMovementKey === type.key;
                             return (
-                                <button
+                                <div
                                     key={type.key}
-                                    type="button"
-                                    className={`ss-movement-action ${type.movement_type}${
-                                        isPending ? " is-pending" : ""
-                                    }${isDone ? " is-done" : ""}${isAnnulled ? " is-annulled" : ""}`}
-                                    onClick={() => openMovementForType(type)}
-                                    disabled={editing || movementSaving || isDone}
-                                    title={
-                                        isDone
-                                            ? "Ya registrado. Anulalo para poder registrarlo de nuevo."
-                                            : isAnnulled
-                                              ? "El movimiento registrado fue anulado. Podés registrarlo de nuevo."
-                                              : isPending
-                                                ? "Pendiente"
-                                                : undefined
-                                    }
+                                    className={`ss-movement-group${isExpanded ? " is-expanded" : ""}`}
                                 >
-                                    {isDone ? <Check size={14} /> : <Plus size={14} />} {type.label}
-                                    {isDone ? (
-                                        <span className="ss-movement-done" title="Movimiento realizado">
-                                            <Check size={14} />
-                                        </span>
-                                    ) : isAnnulled ? (
-                                        <span
-                                            className="ss-movement-annulled"
-                                            title="Movimiento anulado"
-                                        >
-                                            <CircleHelp size={14} />
-                                        </span>
-                                    ) : isPending ? (
-                                        <span className="ss-movement-pending" title="Pendiente">
-                                            <X size={14} />
-                                        </span>
-                                    ) : null}
-                                </button>
+                                    <button
+                                        type="button"
+                                        className={`ss-movement-action ${type.movement_type}${
+                                            isPending ? " is-pending" : ""
+                                        }${isDone ? " is-done" : ""}${isAnnulled ? " is-annulled" : ""}`}
+                                        onClick={() =>
+                                            hasMovements
+                                                ? toggleMovementGroup(type.key)
+                                                : openMovementForType(type)
+                                        }
+                                        disabled={editing || movementSaving}
+                                        aria-expanded={hasMovements ? isExpanded : undefined}
+                                        title={
+                                            hasMovements
+                                                ? isExpanded
+                                                    ? "Ocultar el detalle"
+                                                    : "Ver el detalle del movimiento"
+                                                : isPending
+                                                  ? "Pendiente"
+                                                  : "Registrar"
+                                        }
+                                    >
+                                        {hasMovements ? (
+                                            <ChevronDown
+                                                size={14}
+                                                className={`ss-movement-chevron${isExpanded ? " is-open" : ""}`}
+                                            />
+                                        ) : (
+                                            <Plus size={14} />
+                                        )}
+                                        <span className="ss-movement-action-label">{type.label}</span>
+                                        {typeMovements.length > 1 && (
+                                            <span className="ss-movement-count">{typeMovements.length}</span>
+                                        )}
+                                        {isDone ? (
+                                            <span className="ss-movement-done" title="Movimiento realizado">
+                                                <Check size={14} />
+                                            </span>
+                                        ) : isAnnulled ? (
+                                            <span className="ss-movement-annulled" title="Movimiento anulado">
+                                                <CircleHelp size={14} />
+                                            </span>
+                                        ) : isPending ? (
+                                            <span className="ss-movement-pending" title="Pendiente">
+                                                <X size={14} />
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                    {isExpanded && (
+                                        <div className="ss-movement-group-body">
+                                            {typeMovements.map(renderMovementItem)}
+                                            {!isDone && (
+                                                <button
+                                                    type="button"
+                                                    className="ss-link-btn ss-movement-again"
+                                                    onClick={() => openMovementForType(type)}
+                                                    disabled={editing || movementSaving}
+                                                >
+                                                    <Plus size={12} /> Registrar de nuevo
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
+                        {movementFilter === "all" && otherMovements.length > 0 && (
+                            <div
+                                className={`ss-movement-group${
+                                    expandedMovementKey === OTHER_MOVEMENTS_KEY ? " is-expanded" : ""
+                                }`}
+                            >
+                                <button
+                                    type="button"
+                                    className="ss-movement-action ss-movement-action-other"
+                                    onClick={() => toggleMovementGroup(OTHER_MOVEMENTS_KEY)}
+                                    aria-expanded={expandedMovementKey === OTHER_MOVEMENTS_KEY}
+                                >
+                                    <ChevronDown
+                                        size={14}
+                                        className={`ss-movement-chevron${
+                                            expandedMovementKey === OTHER_MOVEMENTS_KEY ? " is-open" : ""
+                                        }`}
+                                    />
+                                    <span className="ss-movement-action-label">Otros movimientos</span>
+                                    <span className="ss-movement-count">{otherMovements.length}</span>
+                                </button>
+                                {expandedMovementKey === OTHER_MOVEMENTS_KEY && (
+                                    <div className="ss-movement-group-body">
+                                        {otherMovements.map(renderMovementItem)}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {availableMovementTypes.length === 0 && (
                             <p className="ss-movement-empty">
                                 Configurá los movimientos en Configuración → Variables.
@@ -1027,7 +1295,7 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                     </div>
 
                     {draft && (
-                        <form className="ss-movement-form" onSubmit={handleSubmitMovement}>
+                        <form className="ss-movement-form ss-movement-form-bottom" onSubmit={handleSubmitMovement}>
                             <div className="ss-movement-form-head">
                                 <span>{draft.label}</span>
                                 <button
@@ -1074,12 +1342,43 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                                     >
                                         <option value="efectivo">Efectivo</option>
                                         <option value="transferencia">Transferencia</option>
+                                        {record.member_id && draft.movementType === "ingreso" && (
+                                            <option value="cuenta_corriente">Cuenta corriente</option>
+                                        )}
                                     </select>
                                 </div>
                             </div>
+                            {draft.mode === "cuenta_corriente" && (
+                                <span className="ss-hint ss-account-hint">
+                                    Se descuenta de la cuenta corriente del socio; no ingresa dinero a caja.
+                                    {currentAccountBalance === null ? (
+                                        <> Cargando saldo...</>
+                                    ) : currentAccountBalance.value === null ? (
+                                        <> No se pudo cargar el saldo.</>
+                                    ) : (
+                                        <>
+                                            {" "}Saldo actual:{" "}
+                                            <strong>{toCurrency(currentAccountBalance.value)}</strong>
+                                            {" "}&rarr; quedará en{" "}
+                                            <strong
+                                                className={
+                                                    currentAccountBalance.value - parseMoney(draft.amount) < 0
+                                                        ? "is-negative"
+                                                        : undefined
+                                                }
+                                            >
+                                                {toCurrency(currentAccountBalance.value - parseMoney(draft.amount))}
+                                            </strong>
+                                        </>
+                                    )}
+                                </span>
+                            )}
                             {draft.statusToApply && (
                                 <span className="ss-hint">
-                                    Al guardar también se actualizará el estado del servicio.
+                                    Al guardar, el estado pasa a "
+                                    {stepStatuses.find((item) => item.key === draft.statusToApply)?.label ??
+                                        draft.statusToApply}
+                                    ".
                                 </span>
                             )}
                             {movementError && <div className="ss-error">{movementError}</div>}
@@ -1113,77 +1412,6 @@ const SpecialServiceRecordDetailModal: React.FC<SpecialServiceRecordDetailModalP
                             </div>
                         </form>
                     )}
-
-                    <div className="ss-movement-list custom-scroll">
-                        {movementsLoading ? (
-                            <div className="ss-loading">
-                                <Loader size={16} className="spin" /> Cargando...
-                            </div>
-                        ) : movements.length === 0 ? (
-                            <p className="ss-movement-empty">Todavía no hay movimientos.</p>
-                        ) : (
-                            movements.map((movement) => (
-                                <div
-                                    key={movement.id}
-                                    className={`ss-movement-item ${movement.movement_type}${
-                                        movement.movement_anulado ? " is-annulled" : ""
-                                    }`}
-                                >
-                                    <div className="ss-movement-item-top">
-                                        <span className="ss-movement-item-label">
-                                            {movement.label}
-                                        </span>
-                                        <span className="ss-movement-item-amount">
-                                            {movement.movement_type === "egreso" ? "−" : "+"}
-                                            {toCurrency(movement.amount)}
-                                        </span>
-                                    </div>
-                                    <div className="ss-movement-item-meta">
-                                        <span>{formatRecordDate(movement.date)}</span>
-                                        <span>
-                                            {movement.mode === "efectivo"
-                                                ? "Efectivo"
-                                                : "Transferencia"}
-                                        </span>
-                                        {!movement.includes_movement && (
-                                            <span className="ss-movement-tag">Sin caja</span>
-                                        )}
-                                        {movement.movement_anulado && (
-                                            <span
-                                                className="ss-movement-tag annulled"
-                                                title="Este movimiento fue anulado. Podés registrarlo de nuevo."
-                                            >
-                                                <CircleHelp size={10} /> Anulado
-                                            </span>
-                                        )}
-                                    </div>
-                                    {movement.movement_id && (
-                                        <div className="ss-movement-item-actions">
-                                            <button
-                                                type="button"
-                                                className="ss-link-btn"
-                                                onClick={() => openComprobanteForMovement(movement)}
-                                            >
-                                                Ver comprobante <FileText size={12} />
-                                            </button>
-                                            {onNavigateToMovement && (
-                                                <button
-                                                    type="button"
-                                                    className="ss-link-btn"
-                                                    onClick={() => {
-                                                        onClose();
-                                                        onNavigateToMovement(movement.movement_id!);
-                                                    }}
-                                                >
-                                                    Ver movimiento <ExternalLink size={12} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            ))
-                        )}
-                    </div>
                 </aside>
             </div>
 

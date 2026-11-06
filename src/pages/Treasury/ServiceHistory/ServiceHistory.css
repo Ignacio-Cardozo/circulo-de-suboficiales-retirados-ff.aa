@@ -182,3 +182,70 @@
 .service-modal-link-btn:hover {
     background: #eef2fb;
 }
+
+/* Tipo de servicio en la grilla del historial. */
+.service-kind-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.service-kind-badge.is-common {
+    background: #eef2fb;
+    color: var(--azul-institucional);
+}
+
+.service-kind-badge.is-special {
+    background: #fdf3e2;
+    color: #b45309;
+}
+
+a.link-btn {
+    text-decoration: none;
+}
+
+a.link-btn:hover {
+    text-decoration: underline;
+}
+
+/* Modal de movimientos de un servicio especial. */
+.ss-history-movements {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 20px 20px;
+}
+
+.ss-history-movements-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--azul-armada);
+}
+
+.ss-history-movements-head span + span {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.ss-history-movements-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.ss-history-movements-total strong {
+    font-size: 15px;
+    color: var(--azul-armada);
+}

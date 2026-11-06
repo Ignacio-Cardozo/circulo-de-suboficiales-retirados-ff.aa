@@ -680,7 +680,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
       }
 
       if (method === "POST") {
-        const { name, detail, member_price, person_price, deposit_cost } = req.body;
+        const { name, detail, member_price, person_price, deposit_cost, insurance_cost } = req.body;
         if (!name?.trim()) {
           res.status(400).json({ error: "Falta el nombre del servicio especial" });
           return;
@@ -691,13 +691,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           member_price: member_price ?? 0,
           person_price: person_price ?? 0,
           deposit_cost: deposit_cost ?? 0,
+          insurance_cost: insurance_cost ?? 0,
         });
         res.status(201).json(result);
         return;
       }
 
       if (method === "PUT") {
-        const { id, name, detail, member_price, person_price, deposit_cost } = req.body;
+        const { id, name, detail, member_price, person_price, deposit_cost, insurance_cost } = req.body;
         if (!id || !name?.trim()) {
           res.status(400).json({ error: "Faltan parámetros id y/o name" });
           return;
@@ -708,6 +709,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           member_price: member_price ?? 0,
           person_price: person_price ?? 0,
           deposit_cost: deposit_cost ?? 0,
+          insurance_cost: insurance_cost ?? 0,
         });
         if (!result) {
           res.status(404).json({ error: "Servicio especial no encontrado" });
@@ -1019,6 +1021,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
         insertSpecialServiceMovementType,
         updateSpecialServiceMovementType,
         deleteSpecialServiceMovementType,
+        parseMovementAmountSource,
       } = await import("../src/database/specialServiceMovementTypesRepository.js");
 
       if (method === "GET") {
@@ -1038,6 +1041,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           includes_movement: req.body.includes_movement !== false,
           movement_type: req.body.movement_type === "egreso" ? "egreso" : "ingreso",
           is_default: typeof req.body.is_default === "boolean" ? req.body.is_default : undefined,
+          amount_source: parseMovementAmountSource(req.body.amount_source),
         });
         res.status(201).json(result);
         return;
@@ -1054,6 +1058,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
           includes_movement: req.body.includes_movement !== false,
           movement_type: req.body.movement_type === "egreso" ? "egreso" : "ingreso",
           is_default: typeof req.body.is_default === "boolean" ? req.body.is_default : undefined,
+          amount_source: parseMovementAmountSource(req.body.amount_source),
         });
         if (!result) {
           res.status(404).json({ error: "Movimiento no encontrado" });
@@ -1142,6 +1147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
         getSpecialServiceRecordMovements,
         insertSpecialServiceRecordMovement,
         deleteSpecialServiceRecordMovement,
+        parseMovementMode,
       } = await import("../src/database/specialServiceMovementTypesRepository.js");
 
       if (method === "GET") {
@@ -1200,7 +1206,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
                 : undefined,
             amount: Number(req.body.amount) || 0,
             date,
-            mode: req.body.mode === "transferencia" ? "transferencia" : "efectivo",
+            mode: parseMovementMode(req.body.mode),
           });
           res.status(201).json(result);
         } catch (error) {

@@ -1,4 +1,5 @@
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type ReceiptConceptRow = {
     id: string;
@@ -23,7 +24,7 @@ const SEED_CONCEPTS: { type: "ingreso" | "egreso"; name: string; target: "socios
     { type: "egreso", name: "Otros", target: "ambos", sort_order: 14, copies: 1 },
 ];
 
-export async function ensureReceiptConceptsTables(): Promise<void> {
+async function ensureReceiptConceptsTablesTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS receipt_concepts (
@@ -163,3 +164,6 @@ export async function saveAllReceiptConcepts(
 
     return getAllReceiptConcepts();
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const ensureReceiptConceptsTables = runOnce(ensureReceiptConceptsTablesTask);

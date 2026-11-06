@@ -1,7 +1,8 @@
 import type { ComprobanteRecord } from "./comprobantesApi";
 
 export type MovementDirection = "ingreso" | "egreso";
-export type MovementMode = "efectivo" | "transferencia";
+/** "cuenta_corriente": el socio paga con su cuenta corriente (no entra dinero a caja). */
+export type MovementMode = "efectivo" | "transferencia" | "cuenta_corriente";
 
 export type SpecialServiceRecordMovementItem = {
     id: string;
@@ -14,6 +15,7 @@ export type SpecialServiceRecordMovementItem = {
     date: string;
     mode: MovementMode;
     movement_id: string | null;
+    debt_id: string | null;
     movement_anulado: boolean | null;
     created_at: string;
     updated_at: string;

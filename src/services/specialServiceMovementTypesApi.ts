@@ -1,5 +1,8 @@
 export type MovementDirection = "ingreso" | "egreso";
 
+/** Monto sugerido al registrar el movimiento (ver utils/specialServiceAmounts). */
+export type MovementAmountSource = "total" | "sena" | "saldo" | "seguro" | "manual";
+
 export type SpecialServiceMovementTypeItem = {
     key: string;
     label: string;
@@ -8,6 +11,7 @@ export type SpecialServiceMovementTypeItem = {
     sort_order: number;
     /** Forma parte de la lista base para servicios sin configuración propia. */
     is_default: boolean;
+    amount_source: MovementAmountSource;
     created_at: string;
     updated_at: string;
 };
@@ -17,6 +21,7 @@ export type SpecialServiceMovementTypeInput = {
     includes_movement: boolean;
     movement_type: MovementDirection;
     is_default?: boolean;
+    amount_source?: MovementAmountSource;
 };
 
 async function parseError(response: Response, fallback: string): Promise<Error> {

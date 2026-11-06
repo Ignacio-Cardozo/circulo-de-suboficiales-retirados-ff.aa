@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
+import { runOnce } from "./runOnce.js";
 
 export type DueRow = {
     id: string;
@@ -47,7 +48,7 @@ function parsePaidMembers(val: unknown): string[] | null {
     return parseJsonArray(val);
 }
 
-export async function migrateDuesSchema(): Promise<void> {
+async function migrateDuesSchemaTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS dues (
@@ -302,3 +303,6 @@ export async function getMembersDebtStatus(): Promise<Record<string, string | nu
     }
     return map;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const migrateDuesSchema = runOnce(migrateDuesSchemaTask);

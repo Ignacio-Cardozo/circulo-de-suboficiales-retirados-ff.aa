@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { getSql } from "./connection.js";
 import type { ServiceRecordWithDetails } from "./types.js";
+import { runOnce } from "./runOnce.js";
 
-export async function migrateServiceRecordsSchema(): Promise<void> {
+async function migrateServiceRecordsSchemaTask(): Promise<void> {
     const sql = getSql();
     await sql`
         CREATE TABLE IF NOT EXISTS service_records (
@@ -249,3 +250,6 @@ export async function deleteServiceRecordsByMovement(movementId: string): Promis
     const result = await sql`DELETE FROM service_records WHERE movement_id = ${movementId}`;
     return (result as unknown as { count: number })?.count > 0;
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const migrateServiceRecordsSchema = runOnce(migrateServiceRecordsSchemaTask);

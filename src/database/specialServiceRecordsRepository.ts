@@ -7,6 +7,7 @@ import {
     ensureCanceledSpecialServiceStatus,
     ensureSpecialServiceStatusesTable,
 } from "./specialServiceStatusesRepository.js";
+import { runOnce } from "./runOnce.js";
 
 export type SpecialServiceRecordAddonRow = {
     id: string;
@@ -32,6 +33,7 @@ export type SpecialServiceRecordWithDetails = {
     member_price: number | null;
     person_price: number | null;
     deposit_cost: number | null;
+    insurance_cost: number | null;
     member_id: string | null;
     member_nombre: string | null;
     member_numero_de_socio: string | null;
@@ -59,7 +61,7 @@ export type SpecialServiceRecordInput = {
     addons?: SpecialServiceRecordAddonInput[];
 };
 
-export async function migrateSpecialServiceRecordsSchema(): Promise<void> {
+async function migrateSpecialServiceRecordsSchemaTask(): Promise<void> {
     const sql = getSql();
     await ensureSpecialServicesTable();
     await ensureSpecialServiceAddonsTable();
@@ -151,6 +153,7 @@ export async function getAllSpecialServiceRecords(): Promise<SpecialServiceRecor
             ss.member_price::float AS member_price,
             ss.person_price::float AS person_price,
             ss.deposit_cost::float AS deposit_cost,
+            ss.insurance_cost::float AS insurance_cost,
             sr.member_id,
             m.nombre AS member_nombre,
             m.numero_de_socio AS member_numero_de_socio,
@@ -183,6 +186,7 @@ export async function getSpecialServiceRecordById(id: string): Promise<SpecialSe
             ss.member_price::float AS member_price,
             ss.person_price::float AS person_price,
             ss.deposit_cost::float AS deposit_cost,
+            ss.insurance_cost::float AS insurance_cost,
             sr.member_id,
             m.nombre AS member_nombre,
             m.numero_de_socio AS member_numero_de_socio,
@@ -219,6 +223,7 @@ export async function getSpecialServiceRecordsByMember(memberId: string): Promis
             ss.member_price::float AS member_price,
             ss.person_price::float AS person_price,
             ss.deposit_cost::float AS deposit_cost,
+            ss.insurance_cost::float AS insurance_cost,
             sr.member_id,
             m.nombre AS member_nombre,
             m.numero_de_socio AS member_numero_de_socio,
@@ -252,6 +257,7 @@ export async function getSpecialServiceRecordsByPerson(personId: string): Promis
             ss.member_price::float AS member_price,
             ss.person_price::float AS person_price,
             ss.deposit_cost::float AS deposit_cost,
+            ss.insurance_cost::float AS insurance_cost,
             sr.member_id,
             m.nombre AS member_nombre,
             m.numero_de_socio AS member_numero_de_socio,
@@ -285,6 +291,7 @@ export async function getSpecialServiceRecordsByMovement(movementId: string): Pr
             ss.member_price::float AS member_price,
             ss.person_price::float AS person_price,
             ss.deposit_cost::float AS deposit_cost,
+            ss.insurance_cost::float AS insurance_cost,
             sr.member_id,
             m.nombre AS member_nombre,
             m.numero_de_socio AS member_numero_de_socio,
@@ -404,3 +411,6 @@ export async function cancelSpecialServiceRecord(
     `;
     return getSpecialServiceRecordById(id);
 }
+
+// Preparación del esquema: una sola vez por proceso del servidor (ver runOnce).
+export const migrateSpecialServiceRecordsSchema = runOnce(migrateSpecialServiceRecordsSchemaTask);
