@@ -64,7 +64,7 @@ function requireGithub() {
 }
 
 const WORKFLOW_MISSING =
-    "Para crear copias desde la app, el workflow tiene que estar en la rama main de GitHub. Mientras tanto, podés generar una copia de prueba haciendo push a la rama backup-test.";
+    "Para crear copias desde la app, el workflow tiene que estar en la rama main de GitHub. Mientras tanto, podés generar una copia de prueba haciendo push a la rama feat/backup_system.";
 
 /** false si el archivo .github/workflows/db-backup.yml no está en la rama por defecto del repo. */
 async function workflowExists(): Promise<boolean> {

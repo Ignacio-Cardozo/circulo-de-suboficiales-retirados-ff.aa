@@ -26,10 +26,10 @@ on:
   schedule:
     - cron: "0 6 * * *" # 06:00 UTC = 03:00 Argentina (solo produccion)
   # TEMPORAL, para probar antes de subir a main: cada push a la rama
-  # backup-test respalda la base de PRUEBA. Borrar este bloque antes del merge.
+  # feat/backup_system respalda la base de PRUEBA. Borrar este bloque antes del merge.
   push:
     branches:
-      - backup-test
+      - feat/backup_system
   workflow_dispatch:
     inputs:
       ambiente:

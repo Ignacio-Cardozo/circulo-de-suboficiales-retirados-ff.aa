@@ -81,11 +81,10 @@ En local, las mismas variables van en el `.env` (`BACKUP_GITHUB_TOKEN`, `BACKUP_
 
 ### Probar antes de subir a main
 
-GitHub solo deja disparar un workflow a mano (botón *Run workflow* o "Crear copia ahora") cuando el archivo está en la rama por defecto. Para probar antes, el workflow tiene un disparo **temporal**: cada push a la rama `backup-test` respalda la base de **prueba** (`DATABASE_URL_PRUEBA`).
+GitHub solo deja disparar un workflow a mano (botón *Run workflow* o "Crear copia ahora") cuando el archivo está en la rama por defecto. Para probar antes, el workflow tiene un disparo **temporal**: cada push a la rama `feat/backup_system` respalda la base de **prueba** (`DATABASE_URL_PRUEBA`).
 
 ```bash
-git checkout -b backup-test
-git push -u origin backup-test
+git push origin feat/backup_system
 ```
 
 En unos minutos la copia aparece en Actions y en la app local (Configuración → Respaldos), donde se puede descargar. Antes de mergear a `main`, borrá el bloque `push:` del workflow.

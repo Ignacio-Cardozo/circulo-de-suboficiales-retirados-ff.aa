@@ -209,7 +209,7 @@ const BackupConfig: React.FC = () => {
                             <AlertTriangle size={18} />
                             <span>
                                 El workflow de respaldos todavía no está en la rama <code>main</code> de GitHub, así que
-                                no se pueden crear copias desde acá. Para probar, hacé push a la rama <code>backup-test</code>:
+                                no se pueden crear copias desde acá. Para probar, hacé push a la rama <code>feat/backup_system</code>:
                                 la copia de la base de prueba aparece en esta lista en un par de minutos.
                             </span>
                         </div>
