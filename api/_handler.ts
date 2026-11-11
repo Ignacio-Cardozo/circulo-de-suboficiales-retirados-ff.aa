@@ -1,4 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { ADMIN_ROLES, HttpError, authenticate, requireRole, type AppRole } from "./_auth.js";
+
+const VALID_ROLES: AppRole[] = ["owner", "admin", "secretario"];
 
 export default async function handler(req: VercelRequest, res: VercelResponse, pathname: string) {
   const method = req.method ?? "GET";
@@ -6,6 +9,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
   try {
     if (method === "OPTIONS") {
       res.status(204).end();
+      return;
+    }
+
+    // Única ruta pública: la usa navigator.sendBeacon, que no permite enviar
+    // headers, y solo escribe en el log.
+    if (pathname === "/api/frontend-errors") {
+      if (method === "POST") {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const clip = (v: unknown) => String(v ?? "").slice(0, 2000);
+        console.error("[frontend]", clip(body.type), clip(body.message), clip(body.url));
+        if (body.stack) console.error("[frontend] stack:", clip(body.stack));
+        res.status(200).json({ success: true });
+        return;
+      }
+      res.status(405).json({ error: "Método no permitido" });
+      return;
+    }
+
+    // A partir de acá todas las rutas requieren una sesión válida de Neon Auth.
+    const auth = await authenticate(req);
+
+    if (pathname.startsWith("/api/backup/")) {
+      const { handleBackup } = await import("./_backup.js");
+      await handleBackup(req, res, pathname, auth);
+      return;
+    }
+
+    // Un usuario recién registrado solo puede darse de alta (POST /api/users)
+    // y consultar su propio rol (GET /api/users).
+    if (!auth.registered && pathname !== "/api/users") {
+      res.status(403).json({ error: "Tu usuario todavía no está dado de alta en el sistema." });
       return;
     }
 
@@ -600,17 +634,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
         return;
       }
 
-      res.status(405).json({ error: "Método no permitido" });
-      return;
-    }
-
-    if (pathname === "/api/frontend-errors") {
-      if (method === "POST") {
-        console.error("[frontend]", req.body?.type, req.body?.message, req.body?.url ?? "");
-        if (req.body?.stack) console.error("[frontend] stack:", req.body.stack);
-        res.status(200).json({ success: true });
-        return;
-      }
       res.status(405).json({ error: "Método no permitido" });
       return;
     }
@@ -1422,44 +1445,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
     }
 
     if (pathname === "/api/users" && method === "GET") {
-      const { getAllAppUsers } = await import("../src/database/usersRepository.js");
-      const users = await getAllAppUsers();
-      res.status(200).json(users);
+      const { getAllAppUsers, getAppUserByAuthId } = await import("../src/database/usersRepository.js");
+      // Los administradores ven a todos; el resto, solo su propio usuario.
+      if (ADMIN_ROLES.includes(auth.role)) {
+        res.status(200).json(await getAllAppUsers());
+      } else {
+        const self = await getAppUserByAuthId(auth.userId);
+        res.status(200).json(self ? [self] : []);
+      }
       return;
     }
 
     if (pathname === "/api/users" && method === "POST") {
-      const { auth_user_id, email, name, role } = req.body;
-      if (!auth_user_id || !email) {
-        res.status(400).json({ error: "Faltan auth_user_id y/o email" });
+      // Alta del propio usuario después de registrarse. El id sale del token
+      // (no del body) y el rol nunca se toma del pedido: los nuevos son
+      // "secretario" y un usuario existente conserva el suyo.
+      const { email, name } = (req.body ?? {}) as { email?: string; name?: string | null };
+      const finalEmail = auth.email ?? email;
+      if (!finalEmail) {
+        res.status(400).json({ error: "Falta el email" });
         return;
       }
       const { upsertAppUser } = await import("../src/database/usersRepository.js");
-      const user = await upsertAppUser(auth_user_id, email, name ?? null, role ?? "secretario");
+      const user = await upsertAppUser(auth.userId, finalEmail, name ?? null, "secretario");
       res.status(200).json(user);
       return;
     }
 
     if (pathname === "/api/users" && method === "PATCH") {
-      const { auth_user_id, role } = req.body;
+      requireRole(auth, ADMIN_ROLES, "Solo los administradores pueden cambiar roles.");
+      const { auth_user_id, role } = (req.body ?? {}) as { auth_user_id?: string; role?: AppRole };
       if (!auth_user_id || !role) {
         res.status(400).json({ error: "Faltan auth_user_id y/o role" });
         return;
       }
-      const { updateAppUserRole } = await import("../src/database/usersRepository.js");
-      const user = await updateAppUserRole(auth_user_id, role);
-      if (!user) {
+      if (!VALID_ROLES.includes(role)) {
+        res.status(400).json({ error: "Rol inválido" });
+        return;
+      }
+      const { getAppUserByAuthId, updateAppUserRole } = await import("../src/database/usersRepository.js");
+      const target = await getAppUserByAuthId(auth_user_id);
+      if (!target) {
         res.status(404).json({ error: "Usuario no encontrado" });
         return;
       }
+      // Solo un propietario puede nombrar o quitar propietarios.
+      if ((role === "owner" || target.role === "owner") && auth.role !== "owner") {
+        res.status(403).json({ error: "Solo un propietario puede asignar o quitar el rol de propietario." });
+        return;
+      }
+      if (auth_user_id === auth.userId && role !== auth.role) {
+        res.status(400).json({ error: "No podés cambiar tu propio rol." });
+        return;
+      }
+      const user = await updateAppUserRole(auth_user_id, role);
       res.status(200).json(user);
       return;
     }
 
     if (pathname === "/api/users" && method === "DELETE") {
+      requireRole(auth, ["owner"], "Solo un propietario puede eliminar usuarios.");
       const authUserId = req.query.auth_user_id as string | undefined;
       if (!authUserId) {
         res.status(400).json({ error: "Falta el parámetro auth_user_id" });
+        return;
+      }
+      if (authUserId === auth.userId) {
+        res.status(400).json({ error: "No podés eliminar tu propio usuario." });
         return;
       }
       const { deleteAppUser } = await import("../src/database/usersRepository.js");
@@ -1630,6 +1682,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse, p
 
     res.status(404).json({ error: "Ruta no encontrada" });
   } catch (error) {
+    if (error instanceof HttpError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
     console.error(`Error en ${pathname}:`, error);
     res.status(500).json({ error: "Error interno del servidor" });
   }

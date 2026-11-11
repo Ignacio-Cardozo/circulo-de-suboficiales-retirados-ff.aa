@@ -26,6 +26,7 @@ import DetallePersona from "./pages/Persons/Detalle/Detalle";
 import NewPerson from "./pages/Persons/NewPerson/NewPerson";
 import Config from "./pages/Config/Config";
 import Variables from "./pages/Config/Variables";
+import BackupConfig from "./pages/Config/BackupConfig";
 import Calendario from "./pages/Calendario/Calendario";
 import Reportes from "./pages/Reportes/Reportes";
 import Usuarios from "./pages/Usuarios/Usuarios";
@@ -134,6 +135,11 @@ function App() {
           <Route path="configuracion/variables" element={
             <ProtectedRoute allowedRoles={OWNER_OR_ADMIN}>
               <Variables />
+            </ProtectedRoute>
+          } />
+          <Route path="configuracion/respaldos" element={
+            <ProtectedRoute allowedRoles={OWNER_OR_ADMIN}>
+              <BackupConfig />
             </ProtectedRoute>
           } />
           <Route path="reportes" element={

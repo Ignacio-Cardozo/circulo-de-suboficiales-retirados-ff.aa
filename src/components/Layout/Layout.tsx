@@ -28,6 +28,7 @@ const Layout: React.FC = () => {
     if (path === "/") return { title: " ", subtitle: " " };
     if (path === "/configuracion") return { title: "Configuración", subtitle: "Administrá las variables y ajustes del sistema.", breadcrumbs: ["Configuración"] };
     if (path === "/configuracion/variables") return { title: "Variables del Sistema", subtitle: "Configurar tarifas, saldos iniciales y servicios.", breadcrumbs: ["Configuración", "Variables"] };
+    if (path === "/configuracion/respaldos") return { title: "Respaldos y Migración", subtitle: "Copias de seguridad, exportación de datos y migración.", breadcrumbs: ["Configuración", "Respaldos"] };
     if (path === "/tesoreria/servicios-externos") return { title: "Servicios Externos / Impuestos", subtitle: "Estado de pagos de servicios e impuestos.", breadcrumbs: ["Tesorería", "Servicios Externos"] };
     if (path === "/tesoreria/cementerio") return { title: "Cementerio", subtitle: "Gestión de nichos y pagos de cementerio.", breadcrumbs: ["Tesorería", "Cementerio"] };
     if (path === "/tesoreria/historial-servicios") return { title: "Historial de Servicios", subtitle: "Consulta del historial de servicios facturados.", breadcrumbs: ["Tesorería", "Historial de Servicios"] };

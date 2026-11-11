@@ -1,0 +1,109 @@
+# Backup periódico de la base de datos (Neon) con pg_dump.
+#
+# - Corre todos los días a las 03:00 (hora Argentina) y también se puede
+#   disparar a mano desde GitHub o desde Configuración → Respaldos en la app.
+# - El archivo se CIFRA antes de subirse porque el repositorio es público y
+#   los artifacts de un repo público los puede descargar cualquier usuario de GitHub.
+# - La app (api/_backup.ts) descarga el artifact, lo descifra y se lo entrega
+#   al administrador como un .dump listo para pg_restore.
+#
+# Secrets necesarios (Settings → Secrets and variables → Actions):
+#   DATABASE_URL       connection string de Neon (postgresql://...)
+#   BACKUP_PASSPHRASE  clave de cifrado (mínimo 16 caracteres; la misma va en Vercel)
+#
+# Ver docs/BACKUPS.md para la configuración completa y cómo restaurar.
+
+name: Backup de base de datos
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC = 03:00 Argentina
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # Debe ser >= a la versión de Postgres del servidor en Neon.
+      PG_MAJOR: "17"
+    steps:
+      - name: Verificar secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Falta el secret DATABASE_URL"; exit 1
+          fi
+          if [ ${#BACKUP_PASSPHRASE} -lt 16 ]; then
+            echo "::error::Falta el secret BACKUP_PASSPHRASE o tiene menos de 16 caracteres"; exit 1
+          fi
+
+      - name: Instalar cliente de PostgreSQL ${{ env.PG_MAJOR }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq "postgresql-client-${PG_MAJOR}"
+
+      - name: Generar y cifrar backup
+        id: dump
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          BIN="/usr/lib/postgresql/${PG_MAJOR}/bin"
+
+          # pg_dump necesita la conexión directa, no la del pooler.
+          URL="${DATABASE_URL/-pooler./.}"
+
+          STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          FILE="backup-${STAMP}.dump"
+
+          # Solo el esquema public: es donde están los datos de la app.
+          # neon_auth lo administra Neon Auth y no sirve fuera de Neon.
+          "$BIN/pg_dump" "$URL" \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --schema=public \
+            --file="$FILE"
+
+          # Verifica que el archivo se pueda leer antes de guardarlo.
+          TABLES="$("$BIN/pg_restore" --list "$FILE" | grep -c ' TABLE public ' || true)"
+          echo "Tablas en el backup: ${TABLES}"
+          if [ "${TABLES}" -eq 0 ]; then
+            echo "::error::El backup no contiene tablas"; exit 1
+          fi
+
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -salt \
+            -in "$FILE" -out "${FILE}.enc" -pass env:BACKUP_PASSPHRASE
+          rm -f "$FILE"
+
+          # El día 1 de cada mes se guarda una copia mensual que dura más.
+          if [ "$(date -u +%d)" = "01" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "name=db-backup-monthly-${STAMP}" >> "$GITHUB_OUTPUT"
+            echo "retention=90" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=db-backup-${STAMP}" >> "$GITHUB_OUTPUT"
+            echo "retention=30" >> "$GITHUB_OUTPUT"
+          fi
+          echo "file=${FILE}.enc" >> "$GITHUB_OUTPUT"
+
+      - name: Guardar backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.dump.outputs.name }}
+          path: ${{ steps.dump.outputs.file }}
+          retention-days: ${{ steps.dump.outputs.retention }}
+          compression-level: 0
+          if-no-files-found: error
