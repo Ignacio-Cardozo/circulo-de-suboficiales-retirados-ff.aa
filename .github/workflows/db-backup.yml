@@ -136,7 +136,7 @@ jobs:
           echo "file=${FILE}.enc" >> "$GITHUB_OUTPUT"
 
       - name: Guardar backup
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.dump.outputs.name }}
           path: ${{ steps.dump.outputs.file }}
