@@ -10,12 +10,26 @@ El sistema tiene tres niveles de protección:
 
 ## Cómo funciona
 
-1. Todos los días a las 03:00 (hora Argentina) el workflow [`.github/workflows/db-backup.yml`](../.github/workflows/db-backup.yml) ejecuta `pg_dump` contra Neon (solo el esquema `public`).
+1. El workflow [`.github/workflows/db-backup.yml`](../.github/workflows/db-backup.yml) ejecuta `pg_dump` contra Neon (solo el esquema `public`).
 2. Verifica que el archivo se pueda leer, lo **cifra** con AES-256 (`openssl`) y lo guarda como artifact de GitHub.
    El cifrado es obligatorio: el repositorio es público y los artifacts de un repo público los puede descargar cualquier usuario de GitHub.
-3. Las copias diarias duran 30 días; la del día 1 de cada mes, 90 días (es el máximo que permite GitHub).
-4. En la app, un administrador ve la lista, puede crear una copia en el momento y descargarla. La API ([`api/_backup.ts`](../api/_backup.ts)) baja el artifact, lo descifra y entrega un `.dump` común, listo para `pg_restore`.
-5. Todos los endpoints `/api/backup/*` verifican el JWT de Neon Auth y que el usuario tenga rol `owner` o `admin`.
+3. En la app, un administrador ve la lista, puede crear una copia en el momento y descargarla. La API ([`api/_backup.ts`](../api/_backup.ts)) baja el artifact, lo descifra y entrega un `.dump` común, listo para `pg_restore`.
+4. Todos los endpoints `/api/backup/*` verifican el JWT de Neon Auth y que el usuario tenga rol `owner` o `admin`.
+
+### Dos ambientes: principal y prueba
+
+Cada ambiente tiene su propia base de datos y sus propias copias; nunca se mezclan.
+
+| Ambiente | Base de datos (secret de GitHub) | Cuándo se respalda | Duración de las copias | Desde dónde se ve en la app |
+|---|---|---|---|---|
+| `produccion` | `DATABASE_URL` | Todos los días a las 03:00 + a mano | 30 días (la del día 1 de cada mes: 90) | El deploy de producción de Vercel |
+| `prueba` | `DATABASE_URL_PRUEBA` | Solo a mano | 7 días | Local (`npm run dev`) y previews de Vercel |
+
+- La app detecta sola en qué ambiente está: `produccion` si corre en el deploy de producción de Vercel (`VERCEL_ENV=production`), `prueba` en cualquier otro lado. Se puede forzar con la variable `BACKUP_AMBIENTE`.
+- "Crear copia ahora" dispara el workflow con el ambiente de la app, y la lista muestra solo las copias de ese ambiente.
+- Las copias se llaman `db-backup-produccion-…`, `db-backup-produccion-mensual-…` y `db-backup-prueba-…`.
+- Si falta el secret del ambiente pedido, el workflow falla con un mensaje claro: nunca usa la base del otro ambiente en su lugar.
+- Desde GitHub también se puede correr a mano: Actions → *Backup de base de datos* → *Run workflow* → elegir el ambiente.
 
 ## Configuración (una sola vez)
 
@@ -35,8 +49,11 @@ Repositorio → Settings → Secrets and variables → Actions → *New reposito
 
 | Secret | Valor |
 |---|---|
-| `DATABASE_URL` | La connection string de Neon (la misma que usa Vercel) |
+| `DATABASE_URL` | Connection string de la base **principal** (la misma que usa Vercel en producción) |
+| `DATABASE_URL_PRUEBA` | Connection string de la base **de prueba** (la misma de tu `.env` local). Opcional: solo hace falta para respaldar la base de prueba |
 | `BACKUP_PASSPHRASE` | La clave del paso 1 |
+
+Las connection strings se copian desde Neon → tu proyecto → **Connect**, eligiendo la branch correspondiente (la principal o la de prueba).
 
 ### 3. Token de GitHub para la app
 
@@ -56,8 +73,22 @@ Proyecto → Settings → Environment Variables (entorno *Production*):
 | `BACKUP_PASSPHRASE` | La misma clave del paso 1 |
 | `BACKUP_GITHUB_REPO` | `owner/repositorio` (opcional si Vercel expone las variables de sistema `VERCEL_GIT_*`) |
 | `NEON_AUTH_URL` | Opcional: por defecto se usa `VITE_NEON_AUTH_URL` |
+| `BACKUP_AMBIENTE` | Opcional: `produccion` o `prueba`. No hace falta en Vercel (se detecta solo) |
 
 Después de guardarlas, hacé un redeploy.
+
+En local, las mismas variables van en el `.env` (`BACKUP_GITHUB_TOKEN`, `BACKUP_PASSPHRASE`, `BACKUP_GITHUB_REPO`). La app local trabaja con el ambiente `prueba`.
+
+### Probar antes de subir a main
+
+GitHub solo deja disparar un workflow a mano (botón *Run workflow* o "Crear copia ahora") cuando el archivo está en la rama por defecto. Para probar antes, el workflow tiene un disparo **temporal**: cada push a la rama `backup-test` respalda la base de **prueba** (`DATABASE_URL_PRUEBA`).
+
+```bash
+git checkout -b backup-test
+git push -u origin backup-test
+```
+
+En unos minutos la copia aparece en Actions y en la app local (Configuración → Respaldos), donde se puede descargar. Antes de mergear a `main`, borrá el bloque `push:` del workflow.
 
 ### 5. Probar
 

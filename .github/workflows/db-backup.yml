@@ -1,30 +1,50 @@
-# Backup periódico de la base de datos (Neon) con pg_dump.
+# Backup de la base de datos (Neon) con pg_dump.
 #
-# - Corre todos los días a las 03:00 (hora Argentina) y también se puede
-#   disparar a mano desde GitHub o desde Configuración → Respaldos en la app.
-# - El archivo se CIFRA antes de subirse porque el repositorio es público y
-#   los artifacts de un repo público los puede descargar cualquier usuario de GitHub.
-# - La app (api/_backup.ts) descarga el artifact, lo descifra y se lo entrega
-#   al administrador como un .dump listo para pg_restore.
+# Hay dos ambientes, cada uno con su propia base de datos:
+#   produccion  la base principal (la que usa Vercel). Se respalda todos los días a las 03:00.
+#   prueba      la base de pruebas (la que usás en local). Solo se respalda a mano.
+#
+# Se puede disparar a mano desde GitHub (Actions → Backup de base de datos → Run workflow)
+# o desde la app (Configuración → Respaldos → Crear copia ahora), que elige sola el
+# ambiente según dónde está corriendo.
+#
+# El archivo se CIFRA antes de subirse porque el repositorio es público y los
+# artifacts de un repo público los puede descargar cualquier usuario de GitHub.
 #
 # Secrets necesarios (Settings → Secrets and variables → Actions):
-#   DATABASE_URL       connection string de Neon (postgresql://...)
-#   BACKUP_PASSPHRASE  clave de cifrado (mínimo 16 caracteres; la misma va en Vercel)
+#   DATABASE_URL         connection string de la base PRINCIPAL (postgresql://...)
+#   DATABASE_URL_PRUEBA  connection string de la base de PRUEBA (opcional)
+#   BACKUP_PASSPHRASE    clave de cifrado (mínimo 16 caracteres; la misma va en Vercel y en el .env local)
 #
 # Ver docs/BACKUPS.md para la configuración completa y cómo restaurar.
 
 name: Backup de base de datos
+# Ambiente: el elegido a mano; en un push de prueba, "prueba"; en la ejecución diaria, "produccion".
+run-name: Backup ${{ inputs.ambiente || (github.event_name == 'push' && 'prueba') || 'produccion' }}
 
 on:
   schedule:
-    - cron: "0 6 * * *" # 06:00 UTC = 03:00 Argentina
+    - cron: "0 6 * * *" # 06:00 UTC = 03:00 Argentina (solo produccion)
+  # TEMPORAL, para probar antes de subir a main: cada push a la rama
+  # backup-test respalda la base de PRUEBA. Borrar este bloque antes del merge.
+  push:
+    branches:
+      - backup-test
   workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Base de datos a respaldar
+        type: choice
+        options:
+          - produccion
+          - prueba
+        default: produccion
 
 permissions:
   contents: read
 
 concurrency:
-  group: db-backup
+  group: db-backup-${{ inputs.ambiente || (github.event_name == 'push' && 'prueba') || 'produccion' }}
   cancel-in-progress: false
 
 jobs:
@@ -32,20 +52,30 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
+      AMBIENTE: ${{ inputs.ambiente || (github.event_name == 'push' && 'prueba') || 'produccion' }}
       # Debe ser >= a la versión de Postgres del servidor en Neon.
       PG_MAJOR: "17"
     steps:
-      - name: Verificar secrets
+      - name: Elegir base de datos (${{ env.AMBIENTE }})
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          URL_PRODUCCION: ${{ secrets.DATABASE_URL }}
+          URL_PRUEBA: ${{ secrets.DATABASE_URL_PRUEBA }}
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error::Falta el secret DATABASE_URL"; exit 1
+          case "$AMBIENTE" in
+            produccion) URL="$URL_PRODUCCION"; SECRET="DATABASE_URL" ;;
+            prueba)     URL="$URL_PRUEBA";     SECRET="DATABASE_URL_PRUEBA" ;;
+            *) echo "::error::Ambiente desconocido: $AMBIENTE"; exit 1 ;;
+          esac
+          # Nunca se usa la base de otro ambiente como respaldo: si falta el secret, falla.
+          if [ -z "$URL" ]; then
+            echo "::error::Falta el secret ${SECRET} para el ambiente ${AMBIENTE}"; exit 1
           fi
           if [ ${#BACKUP_PASSPHRASE} -lt 16 ]; then
             echo "::error::Falta el secret BACKUP_PASSPHRASE o tiene menos de 16 caracteres"; exit 1
           fi
+          echo "::add-mask::$URL"
+          echo "DB_SECRET=${SECRET}" >> "$GITHUB_ENV"
 
       - name: Instalar cliente de PostgreSQL ${{ env.PG_MAJOR }}
         run: |
@@ -57,17 +87,19 @@ jobs:
       - name: Generar y cifrar backup
         id: dump
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          URL_PRODUCCION: ${{ secrets.DATABASE_URL }}
+          URL_PRUEBA: ${{ secrets.DATABASE_URL_PRUEBA }}
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
           set -euo pipefail
           BIN="/usr/lib/postgresql/${PG_MAJOR}/bin"
 
+          if [ "$AMBIENTE" = "prueba" ]; then URL="$URL_PRUEBA"; else URL="$URL_PRODUCCION"; fi
           # pg_dump necesita la conexión directa, no la del pooler.
-          URL="${DATABASE_URL/-pooler./.}"
+          URL="${URL/-pooler./.}"
 
           STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-          FILE="backup-${STAMP}.dump"
+          FILE="backup-${AMBIENTE}-${STAMP}.dump"
 
           # Solo el esquema public: es donde están los datos de la app.
           # neon_auth lo administra Neon Auth y no sirve fuera de Neon.
@@ -80,7 +112,7 @@ jobs:
 
           # Verifica que el archivo se pueda leer antes de guardarlo.
           TABLES="$("$BIN/pg_restore" --list "$FILE" | grep -c ' TABLE public ' || true)"
-          echo "Tablas en el backup: ${TABLES}"
+          echo "Ambiente: ${AMBIENTE} (secret ${DB_SECRET}) | Tablas en el backup: ${TABLES}"
           if [ "${TABLES}" -eq 0 ]; then
             echo "::error::El backup no contiene tablas"; exit 1
           fi
@@ -89,12 +121,16 @@ jobs:
             -in "$FILE" -out "${FILE}.enc" -pass env:BACKUP_PASSPHRASE
           rm -f "$FILE"
 
-          # El día 1 de cada mes se guarda una copia mensual que dura más.
-          if [ "$(date -u +%d)" = "01" ] && [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "name=db-backup-monthly-${STAMP}" >> "$GITHUB_OUTPUT"
+          # Nombre: db-backup-<ambiente>[-mensual]-<fecha>. La app filtra por ambiente.
+          if [ "$AMBIENTE" = "prueba" ]; then
+            echo "name=db-backup-prueba-${STAMP}" >> "$GITHUB_OUTPUT"
+            echo "retention=7" >> "$GITHUB_OUTPUT"
+          elif [ "$(date -u +%d)" = "01" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            # El día 1 de cada mes se guarda una copia mensual que dura más.
+            echo "name=db-backup-produccion-mensual-${STAMP}" >> "$GITHUB_OUTPUT"
             echo "retention=90" >> "$GITHUB_OUTPUT"
           else
-            echo "name=db-backup-${STAMP}" >> "$GITHUB_OUTPUT"
+            echo "name=db-backup-produccion-${STAMP}" >> "$GITHUB_OUTPUT"
             echo "retention=30" >> "$GITHUB_OUTPUT"
           fi
           echo "file=${FILE}.enc" >> "$GITHUB_OUTPUT"

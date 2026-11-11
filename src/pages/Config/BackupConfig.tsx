@@ -158,6 +158,7 @@ const BackupConfig: React.FC = () => {
     const latest = status?.backups[0];
     const lastRun = status?.runs[0];
     const configured = status?.configured.github && status?.configured.passphrase;
+    const isTest = status?.ambiente === "prueba";
 
     return (
         <div className="config-container custom-scroll">
@@ -167,10 +168,18 @@ const BackupConfig: React.FC = () => {
                     <header className="backup-card-head">
                         <DatabaseBackup size={24} />
                         <div>
-                            <h3>Copias de seguridad automáticas</h3>
+                            <h3>
+                                Copias de seguridad
+                                {status && (
+                                    <span className={`backup-env backup-env-${status.ambiente}`}>
+                                        {isTest ? "Base de prueba" : "Base principal"}
+                                    </span>
+                                )}
+                            </h3>
                             <p className="config-description">
-                                Todos los días a las 03:00 se guarda una copia completa de la base de datos.
-                                Se conservan 30 días; la del día 1 de cada mes, 90 días.
+                                {isTest
+                                    ? "Estás en el ambiente de prueba: las copias se hacen solo a mano, son de la base de prueba y se conservan 7 días."
+                                    : "Todos los días a las 03:00 se guarda una copia completa de la base de datos. Se conservan 30 días; la del día 1 de cada mes, 90 días."}
                             </p>
                         </div>
                     </header>
@@ -199,21 +208,19 @@ const BackupConfig: React.FC = () => {
                         <div className="backup-banner backup-banner-warn">
                             <AlertTriangle size={18} />
                             <span>
-                                El workflow de respaldos todavía no está en GitHub. Subí los cambios al repositorio
-                                (<code>git push</code>) y tocá <strong>Actualizar</strong>.
+                                El workflow de respaldos todavía no está en la rama <code>main</code> de GitHub, así que
+                                no se pueden crear copias desde acá. Para probar, hacé push a la rama <code>backup-test</code>:
+                                la copia de la base de prueba aparece en esta lista en un par de minutos.
                             </span>
-                            <button type="button" className="backup-secondary-btn" onClick={reload}>
-                                <RefreshCw size={14} /> Actualizar
-                            </button>
                         </div>
                     )}
 
-                    {!loading && status && configured && status.workflow && (
+                    {!loading && status && configured && (
                         <>
                             {lastRun && <RunStatus run={lastRun} />}
 
                             {latest ? (
-                                hoursSince(latest.created_at) > STALE_HOURS ? (
+                                !isTest && hoursSince(latest.created_at) > STALE_HOURS ? (
                                     <div className="backup-banner backup-banner-warn">
                                         <AlertTriangle size={18} />
                                         <span>La última copia es del {dateFmt.format(new Date(latest.created_at))}. Hace más de 2 días que no se genera una nueva.</span>
@@ -225,7 +232,7 @@ const BackupConfig: React.FC = () => {
                                     </div>
                                 )
                             ) : (
-                                !isRunning(lastRun) && (
+                                status.workflow && !isRunning(lastRun) && (
                                     <div className="backup-banner backup-banner-warn">
                                         <AlertTriangle size={18} />
                                         <span>Todavía no hay copias guardadas. Creá la primera con el botón de abajo.</span>
@@ -234,7 +241,7 @@ const BackupConfig: React.FC = () => {
                             )}
 
                             <div className="backup-actions">
-                                <button type="button" className="config-save-btn" onClick={handleStart} disabled={running}>
+                                <button type="button" className="config-save-btn" onClick={handleStart} disabled={running || !status.workflow}>
                                     {running ? <><Loader size={16} className="spin" /> Generando copia…</> : <><DatabaseBackup size={16} /> Crear copia ahora</>}
                                 </button>
                                 <button type="button" className="backup-secondary-btn" onClick={reload} disabled={loading}>

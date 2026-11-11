@@ -20,6 +20,8 @@ export interface BackupRun {
 }
 
 export interface BackupStatus {
+    /** Base de datos de este entorno: la principal (Vercel) o la de prueba (local / previews). */
+    ambiente: "produccion" | "prueba";
     configured: { github: boolean; passphrase: boolean };
     /** false si el workflow todavía no está subido a GitHub. */
     workflow: boolean;

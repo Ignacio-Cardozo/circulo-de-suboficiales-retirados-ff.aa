@@ -14,6 +14,11 @@
  *   BACKUP_GITHUB_TOKEN   token de GitHub con permiso "Actions: read and write" sobre el repo
  *   BACKUP_PASSPHRASE     la misma clave configurada como secret en GitHub
  *   BACKUP_GITHUB_REPO    opcional, "owner/repo" (por defecto se usa el repo que despliega Vercel)
+ *   BACKUP_AMBIENTE       opcional, "produccion" o "prueba". Por defecto: "produccion" en el
+ *                         deploy de producción de Vercel y "prueba" en cualquier otro lado (local, previews).
+ *
+ * Cada ambiente ve y genera solo sus propias copias (el workflow las nombra
+ * db-backup-<ambiente>-...), así la base de prueba y la principal no se mezclan.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createDecipheriv, pbkdf2Sync } from "node:crypto";
@@ -21,8 +26,19 @@ import { unzipSync } from "fflate";
 import { ADMIN_ROLES, HttpError, requireRole, type AuthContext } from "./_auth.js";
 
 const WORKFLOW_FILE = "db-backup.yml";
-const ARTIFACT_PREFIX = "db-backup-";
 const PAGE_SIZE = 2000;
+
+type Ambiente = "produccion" | "prueba";
+
+function currentAmbiente(): Ambiente {
+    const explicit = process.env.BACKUP_AMBIENTE?.trim().toLowerCase();
+    if (explicit === "produccion" || explicit === "prueba") return explicit;
+    return process.env.VERCEL_ENV === "production" ? "produccion" : "prueba";
+}
+
+function artifactPrefix(ambiente: Ambiente): string {
+    return `db-backup-${ambiente}-`;
+}
 
 // ---------------------------------------------------------------------------
 // GitHub
@@ -48,7 +64,7 @@ function requireGithub() {
 }
 
 const WORKFLOW_MISSING =
-    "El workflow de respaldos todavía no está en GitHub. Subí los cambios al repositorio (git push) y volvé a intentar.";
+    "Para crear copias desde la app, el workflow tiene que estar en la rama main de GitHub. Mientras tanto, podés generar una copia de prueba haciendo push a la rama backup-test.";
 
 /** false si el archivo .github/workflows/db-backup.yml no está en la rama por defecto del repo. */
 async function workflowExists(): Promise<boolean> {
@@ -91,33 +107,38 @@ type GithubRun = {
     status: string;
     conclusion: string | null;
     event: string;
+    display_title: string;
     created_at: string;
     updated_at: string;
     html_url: string;
 };
 
-async function listBackups() {
+async function listBackups(ambiente: Ambiente) {
+    const prefix = artifactPrefix(ambiente);
     const res = await github(`/actions/artifacts?per_page=100`);
     if (!res.ok) throw new HttpError(502, `GitHub respondió ${res.status} al listar las copias`);
     const body = (await res.json()) as { artifacts: GithubArtifact[] };
     return body.artifacts
-        .filter((a) => a.name.startsWith(ARTIFACT_PREFIX) && !a.expired)
+        .filter((a) => a.name.startsWith(prefix) && !a.expired)
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .map((a) => ({
             id: a.id,
             name: a.name,
-            kind: a.name.startsWith(`${ARTIFACT_PREFIX}monthly-`) ? "mensual" : "diaria",
+            kind: a.name.startsWith(`${prefix}mensual-`) ? "mensual" : "diaria",
             size: a.size_in_bytes,
             created_at: a.created_at,
             expires_at: a.expires_at,
         }));
 }
 
-async function listRuns() {
-    const res = await github(`/actions/workflows/${WORKFLOW_FILE}/runs?per_page=5`);
+async function listRuns(ambiente: Ambiente) {
+    const res = await github(`/actions/workflows/${WORKFLOW_FILE}/runs?per_page=30`, {}, { allow404: true });
+    if (res.status === 404) return []; // el workflow nunca corrió en GitHub
     if (!res.ok) throw new HttpError(502, `GitHub respondió ${res.status} al consultar las ejecuciones`);
     const body = (await res.json()) as { workflow_runs: GithubRun[] };
-    return body.workflow_runs.map((r) => ({
+    // El workflow se titula "Backup <ambiente>" (run-name).
+    const ownRuns = body.workflow_runs.filter((r) => r.display_title === `Backup ${ambiente}`).slice(0, 5);
+    return ownRuns.map((r) => ({
         id: r.id,
         status: r.status,
         conclusion: r.conclusion,
@@ -147,14 +168,15 @@ function decryptOpenssl(data: Uint8Array, passphrase: string): Buffer {
     }
 }
 
-async function downloadBackup(id: number): Promise<{ filename: string; data: Buffer }> {
+async function downloadBackup(id: number, ambiente: Ambiente): Promise<{ filename: string; data: Buffer }> {
     const passphrase = process.env.BACKUP_PASSPHRASE ?? "";
     if (!passphrase) throw new HttpError(503, "Falta configurar BACKUP_PASSPHRASE en el servidor.");
 
     const meta = await github(`/actions/artifacts/${id}`);
     if (!meta.ok) throw new HttpError(404, "Copia no encontrada.");
     const artifact = (await meta.json()) as GithubArtifact;
-    if (!artifact.name.startsWith(ARTIFACT_PREFIX)) throw new HttpError(404, "Copia no encontrada.");
+    // Solo se descargan copias del ambiente actual.
+    if (!artifact.name.startsWith(artifactPrefix(ambiente))) throw new HttpError(404, "Copia no encontrada.");
     if (artifact.expired) throw new HttpError(410, "Esta copia ya venció y fue eliminada por GitHub.");
 
     // GitHub responde con una redirección a una URL temporal; fetch la sigue
@@ -227,6 +249,7 @@ export async function handleBackup(req: VercelRequest, res: VercelResponse, path
     const method = req.method ?? "GET";
     try {
         requireRole(auth, ADMIN_ROLES, "Solo los administradores pueden acceder a los respaldos.");
+        const ambiente = currentAmbiente();
 
         if (pathname === "/api/backup/status" && method === "GET") {
             const cfg = githubConfig();
@@ -235,12 +258,13 @@ export async function handleBackup(req: VercelRequest, res: VercelResponse, path
                 passphrase: Boolean(process.env.BACKUP_PASSPHRASE),
             };
             if (!configured.github) {
-                res.status(200).json({ configured, workflow: false, backups: [], runs: [] });
+                res.status(200).json({ ambiente, configured, workflow: false, backups: [], runs: [] });
                 return;
             }
-            const [workflow, backups] = await Promise.all([workflowExists(), listBackups()]);
-            const runs = workflow ? await listRuns() : [];
-            res.status(200).json({ configured, workflow, backups, runs });
+            // Las copias y ejecuciones se muestran siempre (por ejemplo, las generadas
+            // desde una rama de prueba), aunque el workflow todavía no esté en main.
+            const [workflow, backups, runs] = await Promise.all([workflowExists(), listBackups(ambiente), listRuns(ambiente)]);
+            res.status(200).json({ ambiente, configured, workflow, backups, runs });
             return;
         }
 
@@ -250,8 +274,11 @@ export async function handleBackup(req: VercelRequest, res: VercelResponse, path
             const r = await github(`/actions/workflows/${WORKFLOW_FILE}/dispatches`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ref }),
+                body: JSON.stringify({ ref, inputs: { ambiente } }),
             });
+            // 422: el workflow existe (por ejemplo, corrió desde una rama) pero la
+            // versión con workflow_dispatch todavía no está en la rama por defecto.
+            if (r.status === 422 || r.status === 404) throw new HttpError(409, WORKFLOW_MISSING);
             if (r.status !== 204) throw new HttpError(502, `GitHub respondió ${r.status} al iniciar la copia`);
             res.status(202).json({ started: true });
             return;
@@ -260,7 +287,7 @@ export async function handleBackup(req: VercelRequest, res: VercelResponse, path
         if (pathname === "/api/backup/download" && method === "GET") {
             const id = Number(req.query.id);
             if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, "Falta el parámetro id");
-            const { filename, data } = await downloadBackup(id);
+            const { filename, data } = await downloadBackup(id, ambiente);
             res.setHeader("Content-Type", "application/octet-stream");
             res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
             res.setHeader("Cache-Control", "no-store");
