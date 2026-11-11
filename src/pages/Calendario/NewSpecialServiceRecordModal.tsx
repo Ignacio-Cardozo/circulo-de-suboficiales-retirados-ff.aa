@@ -31,6 +31,10 @@ import { formatNumberInput, parseMoney, toCurrency, todayLocal } from "../../uti
 
 type TitularType = "member" | "person" | "none";
 
+/** Ancho de los paneles laterales (nuevo / editar servicio y persona). */
+const SERVICE_PANEL_WIDTH = 480;
+const PERSON_PANEL_WIDTH = 400;
+
 interface NewSpecialServiceRecordModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -376,7 +380,8 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
             isOpen={isOpen}
             onClose={handleCloseModal}
             title="Agendar un servicio"
-            maxWidth={anyPanelOpen ? 1180 : 820}
+            // El formulario mantiene su ancho normal; el panel se suma a la derecha.
+            maxWidth={820 + (editorOpen ? SERVICE_PANEL_WIDTH : personEditorOpen ? PERSON_PANEL_WIDTH : 0)}
             contentClassName="ss-modal"
             closeOnOverlayClick={false}
         >
@@ -386,7 +391,14 @@ const NewSpecialServiceRecordModal: React.FC<NewSpecialServiceRecordModalProps> 
                         <Loader size={18} className="spin" /> Cargando datos...
                     </div>
                 ) : (
-                    <div className={`ss-columns${anyPanelOpen ? " has-editor" : ""}`}>
+                    <div
+                        className={`ss-columns${anyPanelOpen ? " has-editor" : ""}`}
+                        style={
+                            {
+                                "--ss-editor-width": `${editorOpen ? SERVICE_PANEL_WIDTH : PERSON_PANEL_WIDTH}px`,
+                            } as React.CSSProperties
+                        }
+                    >
                         <form className="ss-form" onSubmit={handleSubmit}>
                         <div className="ss-field">
                             <label>Servicio especial *</label>
