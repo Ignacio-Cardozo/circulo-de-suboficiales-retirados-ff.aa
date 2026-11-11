@@ -3,13 +3,11 @@ import {
     AlertTriangle,
     CheckCircle2,
     Clock,
-    Copy,
     DatabaseBackup,
     Download,
     FileSpreadsheet,
     Loader,
     RefreshCw,
-    Server,
     XCircle,
 } from "lucide-react";
 import {
@@ -43,30 +41,6 @@ function hoursSince(iso: string): number {
 function isRunning(run: BackupRun | undefined): boolean {
     return !!run && run.status !== "completed";
 }
-
-const RESTORE_CMD = `pg_restore --no-owner --no-privileges -d "postgresql://usuario:clave@servidor/base" backup.dump`;
-
-const CopyCommand: React.FC<{ command: string }> = ({ command }) => {
-    const [copied, setCopied] = useState(false);
-    return (
-        <div className="backup-command">
-            <code>{command}</code>
-            <button
-                type="button"
-                className="backup-icon-btn"
-                title="Copiar comando"
-                onClick={() => {
-                    void navigator.clipboard.writeText(command).then(() => {
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                    });
-                }}
-            >
-                {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
-            </button>
-        </div>
-    );
-};
 
 const RunStatus: React.FC<{ run: BackupRun }> = ({ run }) => {
     if (isRunning(run)) {
@@ -221,7 +195,20 @@ const BackupConfig: React.FC = () => {
                         </div>
                     )}
 
-                    {!loading && status && configured && (
+                    {!loading && status && configured && !status.workflow && (
+                        <div className="backup-banner backup-banner-warn">
+                            <AlertTriangle size={18} />
+                            <span>
+                                El workflow de respaldos todavía no está en GitHub. Subí los cambios al repositorio
+                                (<code>git push</code>) y tocá <strong>Actualizar</strong>.
+                            </span>
+                            <button type="button" className="backup-secondary-btn" onClick={reload}>
+                                <RefreshCw size={14} /> Actualizar
+                            </button>
+                        </div>
+                    )}
+
+                    {!loading && status && configured && status.workflow && (
                         <>
                             {lastRun && <RunStatus run={lastRun} />}
 
@@ -324,48 +311,6 @@ const BackupConfig: React.FC = () => {
                             ? <><Loader size={16} className="spin" /> {csvProgress.total ? `Exportando ${Math.min(csvProgress.done + 1, csvProgress.total)} de ${csvProgress.total}…` : "Preparando…"}</>
                             : <><Download size={16} /> Descargar planillas (ZIP)</>}
                     </button>
-                </section>
-
-                {/* Migración */}
-                <section className="config-card backup-card">
-                    <header className="backup-card-head">
-                        <Server size={24} />
-                        <div>
-                            <h3>Migrar la base de datos a otro servidor</h3>
-                            <p className="config-description">
-                                Las copias <strong>.dump</strong> están en el formato estándar de PostgreSQL y se pueden
-                                restaurar en cualquier servidor (otro proyecto de Neon, Supabase, Amazon RDS, una PC propia, etc.).
-                            </p>
-                        </div>
-                    </header>
-                    <ol className="backup-steps">
-                        <li>Descargá la copia más reciente desde la tabla de arriba.</li>
-                        <li>Creá una base de datos vacía en el nuevo servidor (PostgreSQL 17 o superior) y copiá su <em>connection string</em>.</li>
-                        <li>
-                            Instalá las herramientas de PostgreSQL en tu computadora y ejecutá:
-                            <CopyCommand command={RESTORE_CMD} />
-                        </li>
-                        <li>Cambiá la variable <code>DATABASE_URL</code> de la aplicación (en Vercel) por la nueva connection string.</li>
-                    </ol>
-                    <p className="config-card-hint">
-                        Las cuentas de inicio de sesión las administra Neon Auth y no viajan en la copia: al cambiar de proveedor,
-                        los usuarios tienen que volver a registrarse y un administrador reasignarles el rol.
-                    </p>
-                </section>
-
-                {/* Errores recientes */}
-                <section className="config-card backup-card">
-                    <header className="backup-card-head">
-                        <Clock size={24} />
-                        <div>
-                            <h3>¿Se borró algo por error hace un rato?</h3>
-                            <p className="config-description">
-                                Neon permite volver la base a cómo estaba hace unas horas (en el plan gratuito, la ventana es corta).
-                                Se hace desde el panel de Neon: <em>Branches → Restore</em>. Si ya pasó más tiempo, usá una de
-                                las copias diarias.
-                            </p>
-                        </div>
-                    </header>
                 </section>
             </div>
         </div>

@@ -47,7 +47,16 @@ function requireGithub() {
     return cfg;
 }
 
-async function github(path: string, init: RequestInit = {}): Promise<Response> {
+const WORKFLOW_MISSING =
+    "El workflow de respaldos todavía no está en GitHub. Subí los cambios al repositorio (git push) y volvé a intentar.";
+
+/** false si el archivo .github/workflows/db-backup.yml no está en la rama por defecto del repo. */
+async function workflowExists(): Promise<boolean> {
+    const res = await github(`/actions/workflows/${WORKFLOW_FILE}`, {}, { allow404: true });
+    return res.ok;
+}
+
+async function github(path: string, init: RequestInit = {}, opts: { allow404?: boolean } = {}): Promise<Response> {
     const { token, repo } = requireGithub();
     const res = await fetch(`https://api.github.com/repos/${repo}${path}`, {
         ...init,
@@ -62,8 +71,8 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
     if (res.status === 401 || res.status === 403) {
         throw new HttpError(502, "GitHub rechazó el token de respaldos. Revisá BACKUP_GITHUB_TOKEN y sus permisos.");
     }
-    if (res.status === 404) {
-        throw new HttpError(502, "GitHub no encontró el repositorio o el workflow de respaldos. Revisá BACKUP_GITHUB_REPO.");
+    if (res.status === 404 && !opts.allow404) {
+        throw new HttpError(502, "GitHub no encontró el repositorio de respaldos. Revisá BACKUP_GITHUB_REPO.");
     }
     return res;
 }
@@ -226,16 +235,18 @@ export async function handleBackup(req: VercelRequest, res: VercelResponse, path
                 passphrase: Boolean(process.env.BACKUP_PASSPHRASE),
             };
             if (!configured.github) {
-                res.status(200).json({ configured, backups: [], runs: [] });
+                res.status(200).json({ configured, workflow: false, backups: [], runs: [] });
                 return;
             }
-            const [backups, runs] = await Promise.all([listBackups(), listRuns()]);
-            res.status(200).json({ configured, backups, runs });
+            const [workflow, backups] = await Promise.all([workflowExists(), listBackups()]);
+            const runs = workflow ? await listRuns() : [];
+            res.status(200).json({ configured, workflow, backups, runs });
             return;
         }
 
         if (pathname === "/api/backup/run" && method === "POST") {
             const { ref } = requireGithub();
+            if (!(await workflowExists())) throw new HttpError(409, WORKFLOW_MISSING);
             const r = await github(`/actions/workflows/${WORKFLOW_FILE}/dispatches`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

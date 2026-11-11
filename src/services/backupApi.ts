@@ -21,6 +21,8 @@ export interface BackupRun {
 
 export interface BackupStatus {
     configured: { github: boolean; passphrase: boolean };
+    /** false si el workflow todavía no está subido a GitHub. */
+    workflow: boolean;
     backups: BackupItem[];
     runs: BackupRun[];
 }
